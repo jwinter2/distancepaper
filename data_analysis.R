@@ -1,9 +1,11 @@
 library(tidyverse)
 library(arrow)
-library(geopshere)
+library(geosphere)
 library(sf)
 
+# Francois
 setwd("~/Documents/Codes/distancepaper") # path to github repository
+# options(browser = "/usr/bin/brave-browser")
 
 #-----------------
 # For plotting map
@@ -53,9 +55,8 @@ env <- env %>%
   group_by(cruise) %>%
   mutate(
     salinity = case_when(salinity < 32 ~ NaN,
-      salinity < 33.5 & str_detect(cruise, pattern = "Gradients") ~ NaN,
-      salinity < 34.5 & lat < 32 & cruise == "Gradients 2" ~ NaN,
-      c(abs(diff(salinity)),0) > 0.5 ~ NaN, # sporadic drops in salinity in TN271
+      date < as.Date("2017-06-05") & cruise == "Gradients 2" ~ NaN, # contaminated salinity during first half the cruise
+      c(abs(diff(salinity)),0) > 0.5 ~ NaN, # sporadic drops in salinity during TN271 cruise
       TRUE ~ salinity),
     temp = case_when(temp > 32 ~ NaN,
       TRUE ~ temp))
@@ -71,7 +72,7 @@ d <- 0.261; e <- 0.860 # < 3000 µm3
 
 seaflow <- seaflow_psd %>% 
   group_by(cruise, date, pop) %>%
-  dplyr::summarize(
+  dplyr::summarise(
     lat = unique(lat, na.rm = TRUE),
     lon = unique(lon, na.rm = TRUE),
     n_per_uL = sum(n_per_uL, na.rm = TRUE), # calculate cell abundance per population
@@ -96,12 +97,21 @@ meta <- full_join(seaflow %>% select(!cruise), env %>% select(!c(lat, lon)), by 
 
 
 
+
+
+
+#--------------------------------------
+# A. Define the boundaries of the NPSG
+#--------------------------------------
+
 ### Calculate distance along cruisetrack
 # change longitude coordinate system for calculating distance
 meta <- meta %>% 
   filter(!is.na(lon)) %>%
-  mutate(lon = case_when(lon < 0 ~ lon + 360,
-                        TRUE ~ lon))
+  mutate(lon = case_when(lon <= 0 ~ lon + 360,
+    TRUE ~ lon)) %>%
+  filter(lon > 100) # bad GPS coordinates
+
 
 # ship's speed < 15 knots
 # 1 km = 0.53996 knots (nautical mile / h) (top speed 14 knots ~ 26 km / h)
@@ -122,97 +132,71 @@ for(c in unique(meta$cruise)) {
   meta_distance <- bind_rows(meta_distance, meta_d)
 }
 
-
-
 ### calculate mean values over binned distance 
-resolution <- 10 # km (i.e data binned every 10 km)
+resolution <- 50 # km (i.e data binned every 10 km)
 d <- range(meta_distance$distance)
-n <- round(diff(d) / resolution)
 
-meta_distance <- meta_distance %>%
+meta_distance_binned <- meta_distance %>%
   group_by(
     cruise, 
-    distance = cut(distance, seq(d[1],d[2],length.out = n), 
-      labels = seq(d[1],d[2],length.out = n -1))) %>%
-  dplyr::summarize_all(function(x) mean(x, na.rm = TRUE)) %>%
+    distance = cut(distance, seq(d[1],d[2], by = resolution), 
+      labels = seq(d[1],d[2], by = resolution)[-1])) %>%
+  dplyr::summarise_all(function(x) mean(x, na.rm = TRUE)) %>%
   mutate(distance = as.numeric(as.character(distance)))
-
-
-
-
-
-
-
-
-#----------------------------------
-# Define the boundaries of the NPSG
-#----------------------------------
-# 
-# Find latitude marked by abrupt changes in salinity (for reference, mean salinity for NPSG ~ 35 psu)
-# (modified from Follett et al., 2021 Limnology & Oceanography 66 - 2442:2454, doi: 10.1002/lno.11763)
 
 ### plot salinity
 # plot_geo(meta_distance, lat = ~ lat, lon = ~ lon, color = ~ salinity, mode = "scatter", colors = "Spectral") %>%  layout(geo = geo)
 
-### calculate change iof salinity over distance, using smooth salinity data
-smooth <- 0.7 # smoothing parameter
-meta_distance <- meta_distance %>% 
+
+### Find abrupt changes in salinity (modified from Follett et al., 2021 Limnology & Oceanography 66 - 2442:2454, doi: 10.1002/lno.11763)
+# calculate change iof salinity over distance, using smooth salinity data
+smooth <- 0.9 # smoothing parameter
+meta_distance_binned <- meta_distance_binned %>% 
   filter(!is.na(salinity) & !is.na(distance)) %>% # remove NA's for smoothing
   group_by(cruise) %>%
   dplyr::summarize(
     date = date, lat = lat, lon = lon, distance = distance, salinity = salinity,
     smooth_salinity = smooth.spline(distance, salinity, all.knots= TRUE, spar = smooth)$y, # smooth data to remove noisy changes in salinity
     derivative_salinity = c(NA, abs(diff(smooth_salinity) / as.numeric(diff(distance)))), # calculate the rate of change of salinity over distance
-    tz = case_when(derivative_salinity > quantile(derivative_salinity, 0.9, na.rm = TRUE) ~ date))  # find time of rapid changes in salinity
+    sal_front = case_when(derivative_salinity > quantile(derivative_salinity, 0.9, na.rm = TRUE) ~ smooth_salinity))   # find time of rapid changes in salinity
+ 
+### Estimate salinity boundaries of NPSG's transition zone
+# only look at the closest front to the NPSG's salinity (mean salinity ~ 35 psu) 
+tz <- meta_distance_binned %>% 
+    group_by(cruise) %>% 
+    summarize_at(vars(sal_front), function(x) max(x, na.rm = TRUE)) 
 
-# plot locations of all abrupt changes of salinity
-# meta_distance %>%  ggplot() + 
+ 
+### plot locations of all abrupt changes of salinity
+# meta_distance_binned %>%  ggplot() + 
 #   geom_point(aes(distance, salinity)) + 
 #   geom_point(aes(distance, smooth_salinity), col = 2) + 
-#   geom_point(data = meta_distance %>% filter(!is.na(tz)), aes(distance, smooth_salinity), size = 3, col = 3) + 
+#   geom_hline(data = tz, aes( yintercept = sal_front), col = 3) + 
 #   facet_wrap(. ~ cruise, scale = "free_x")
 
-### Estimate midpoint locations of the NPSG's limits for each cruise
-tz <- meta_distance %>% 
-  filter(!is.na(tz)) %>% 
-  filter(lat > 24 | lat < 13) %>% # exclude salinity changes near Hawaiian Islands
-  filter(lat < 50) %>% # exclude salinity fronts near Alaska coast
-  filter(lon < 235) %>% # exclude salinity fronts near Pacific Northwest coast
-  filter(lat > 3) %>% # exclude salinity fronts near Equatorial Pacifc  
-  select(cruise, date, lat, lon, distance) %>% 
-  group_by(cruise, distance = cut(distance, 10)) %>% 
-  dplyr::summarize_all(function(x) median(x, na.rm = T)) %>% # select the midpoint across each salinity change
-  filter(if(cruise[1] == "Gradients 4") TRUE else lat == max(lat)) %>%
-  mutate(date = lubridate::floor_date(date, unit = "hour"),
-    lat_tz = lat) %>%
-  select(cruise, date, lat, lon, lat_tz) 
-      
-
-### plot location of NPSG boundaries
-# plot_geo(meta_distance, lat = ~ lat, lon = ~ lon, color = ~ salinity, type = "scatter", mode = "scatter", colors = "Spectral") %>% 
-# add_trace(data = tz, lat = ~ lat, lon = ~ lon, color = "salinity front", size  = 2) %>% layout(geo = geo)
 
 
-
-#-----------------------------------------------
-# Calculate distance from boundaries of the NPSG
-#-----------------------------------------------
-
-# Identify location inside or outside the gyre
-meta_gyre <- left_join(meta, tz %>% select(cruise, date, lat_tz)) %>%
+### Identify locations inside or outside the gyre (0 = gyre; 1 = outside gyre)
+# Note: using the unbinned data this time
+meta_gyre <- left_join(meta, tz) %>%
   group_by(cruise) %>%
-  mutate(
-    lat_tz = case_when(lat < 21 & lon < 215 ~ median(lat_tz, na.rm = TRUE),  # to deal with Gradients 4 cruise with multiple crossing of boundaries
-      lat < 21 & lon > 215 ~ min(lat_tz, na.rm = TRUE),
-      lat >= 21 ~ max(lat_tz, na.rm = TRUE)),
-    gyre = case_when(cruise == "SR1917" & lon < 205 ~ "IN", 
-      lat > 21 & lat > lat_tz ~ "OUT",
-      lat < 21 & lat < lat_tz ~ "OUT",
-      TRUE ~ "IN")) %>%
-  select(!lat_tz)
+  mutate(raw_gyre = case_when(salinity >= sal_front ~ 0, 
+      TRUE ~ 1),
+    gyre = case_when(lon > 190 & lat < 24 & raw_gyre == 1 ~ 0,
+      lon > 190 & lat < 11 & raw_gyre == 0 ~ 1,
+      lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0,
+      TRUE ~ raw_gyre))
 
-# calculate distance (km) from boundaries of the NPSG for each cruise
-sf_tz <- sf::st_as_sf(tz, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
+### calculate distance (km) from boundaries of the NPSG for each cruise
+# location of boundaries
+id <- which(diff(meta_gyre$gyre) != 0)
+boundaries <- meta_gyre[id,] %>% 
+  group_by(date) %>% 
+  summarize(lat = mean(lat), 
+    lon = mean(lon),
+    cruise = unique(cruise))
+# Create `sf` class object to calcualte distance
+sf_tz <- sf::st_as_sf(boundaries, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
 sf_meta <- sf::st_as_sf(meta_gyre, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
 
 meta_gyre_d <- tibble()
@@ -226,7 +210,7 @@ for(c in unique(sf_meta$cruise)) {
 
 # transform to negative numbers when outside gyre
 meta_gyre_d  <- meta_gyre_d %>% 
-  mutate(distance = case_when(gyre == "OUT" ~ distance,
+  mutate(distance = case_when(gyre == 1 ~ distance,
                               TRUE ~ - distance))
 
 ### plot gyre
@@ -236,51 +220,60 @@ meta_gyre_d  <- meta_gyre_d %>%
 
 
 #-----------------------
-# PLOTTING OVER DISTANCE
+# PLOTTING OVER DISTANCE (work in progress ...)
 #-----------------------
-
-resolution <- 100 # km (i.e data binned every 100 km)
-
 d <- range(meta_gyre_d$distance)
-n <- round(diff(d) / resolution)
+resolution <- 50 # km (i.e data binned every 100 km)
 
 # by cruise
-meta_gyre_d %>%
+p <- meta_gyre_d %>%
+  filter(pop != "croco") %>%
+ # filter(lat > 0) %>%
   group_by(
     cruise, 
     pop,
-    distance = cut(distance, seq(d[1],d[2],length.out = n), 
-      labels = seq(d[1],d[2],length.out = n -1))) %>%
+    distance = cut(distance, seq(d[1],d[2], by = resolution), 
+      labels = seq(d[1],d[2], by = resolution)[-1])) %>%
   dplyr::summarize(
-    value = mean(esd, na.rm = TRUE),
-    sd = sd(esd, na.rm = TRUE)) %>%
+    value = mean(n_per_uL, na.rm = TRUE),
+    sd = sd(n_per_uL, na.rm = TRUE)) %>%
   mutate(distance = as.numeric(as.character(distance))) %>%
-  filter(pop != "croco") %>%
   ggplot(aes(distance, value, col = pop),) + 
     geom_line(lwd = 1) +  
     geom_pointrange(aes(ymax = value + sd, ymin = value - sd)) +
     geom_vline(xintercept = 0, lty = 2) +
     #scale_y_continuous(trans='log10') +
     facet_wrap(. ~  cruise, scale = "free") +
-    theme_bw()
+    theme_bw() +
+    labs(y = "abundance (cells / μL)", x = "distance (km)")
 
+print(p)
 
 # by population
-meta_gyre_d %>%
+p <- meta_gyre_d %>%
   group_by(
     cruise, 
     pop,
-    distance = cut(distance, seq(d[1],d[2],length.out = n), 
-      labels = seq(d[1],d[2],length.out = n -1))) %>%
+    distance = cut(distance, seq(d[1],d[2], by = resolution), 
+      labels = seq(d[1],d[2], by = resolution)[-1])) %>%
   dplyr::summarize(
-    value = mean(esd, na.rm = TRUE),
-    sd = sd(esd, na.rm = TRUE)) %>%
+    value = mean(n_per_uL, na.rm = TRUE),
+    sd = sd(n_per_uL, na.rm = TRUE)) %>%
   mutate(distance = as.numeric(as.character(distance))) %>%
   filter(pop != "croco") %>%
+  filter(cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3") %>%
   ggplot(aes(distance, value, col = cruise),) + 
     geom_line(lwd = 1) +  
     geom_pointrange(aes(ymax = value + sd, ymin = value - sd)) +
     geom_vline(xintercept = 0, lty = 2) +
     #scale_y_continuous(trans='log10') +
-    facet_wrap(. ~  pop, scale = "free") +
-    theme_bw()
+    facet_grid(. ~  pop) +
+    theme_bw() + 
+    #labs(y = "biomass (μgC / L)", x = "distance (km)")
+    #labs(y = "abundance (cells / μL)", x = "distance (km)")
+    labs(y = "diameter (μm)", x = "distance (km)")
+
+
+png("~/figure.png", width = 2500, height = 800, res = 200)
+print(p)
+dev.off()
