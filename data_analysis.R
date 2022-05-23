@@ -214,8 +214,8 @@ meta_gyre_d  <- meta_gyre_d %>%
                            TRUE ~ "outide"))
 
 ### plot gyre
-# g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c("deeppink4","cyan4")) %>% layout(geo = geo)
-# plotly_IMAGE(g, format = "png", out_file = "map-gyre.png", width = 1000, height = 1000)
+g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c("deeppink4","cyan4")) %>% layout(geo = geo)
+plotly_IMAGE(g, format = "png", out_file = "figures/cruise-track.png", width = 1000, height = 1000)
 
 
 #-----------------------
@@ -257,14 +257,12 @@ fig1 <- data_figure %>%
  rename(mean = contains("mean"), sd = contains("sd")) %>%
   ggplot(aes(distance, mean,  col = pop)) + 
     geom_line(aes(group = pop), lwd = 1) +  
-    geom_pointrange(aes(ymax = mean + sd, ymin = mean - sd)) +
+    geom_pointrange(aes(ymax = mean + sd, ymin = mean - sd), alpha = 0.5) +
     geom_vline(xintercept = 0, lty = 2) +
     #scale_y_continuous(trans='log10') +
     facet_wrap(. ~ cruise, scale = "free") +
     theme_bw() +
     labs(y = ylab, x = "distance (km)")
-
-print(fig1)
 
 ### plotting parameter over distance per region
 fig2 <- data_figure %>%
@@ -272,21 +270,18 @@ fig2 <- data_figure %>%
  rename(mean = contains("mean"), sd = contains("sd")) %>%
   ggplot(aes(distance, mean,  col = pop)) + 
     geom_line(aes(group = cruise), lwd = 1) +  
-    geom_pointrange(aes(ymax = mean + sd, ymin = mean - sd)) +
+    geom_pointrange(aes(ymax = mean + sd, ymin = mean - sd), alpha = 0.5) +
     geom_vline(xintercept = 0, lty = 2) +
     #scale_y_continuous(trans='log10') +
     facet_grid(pop ~ region, scale = "free") +
     theme_bw() +
     labs(y = ylab, x = "distance (km)")
 
-print(fig2)
-
-
 ### save pot
-png(paste0(name,"-distance-cruise.png"), width = 2500, height = 800, res = 200)
+png(paste0("figures/",name,"-distance-cruise.png"), width = 2500, height = 1600, res = 200)
 print(fig1)
 dev.off()
 
-png(paste0(name,"-distance-region.png"), width = 2500, height = 800, res = 200)
+png(paste0("figures/",name,"-distance-region.png"), width = 2500, height = 1200, res = 200)
 print(fig2)
 dev.off()
