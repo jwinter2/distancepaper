@@ -5,7 +5,7 @@ library(sf)
 
 # Francois
 setwd("~/Documents/Codes/distancepaper") # path to github repository
-# options(browser = "/usr/bin/brave-browser")
+
 
 #-----------------
 # For plotting map
@@ -78,7 +78,7 @@ seaflow <- seaflow_psd %>%
     n_per_uL = sum(n_per_uL, na.rm = TRUE), # calculate cell abundance per population
     c_per_uL = sum(c_per_uL, na.rm = TRUE)) %>% # calculate carbon biomass per population
     mutate(qc = c_per_uL / n_per_uL, # calculate carbon per cell
-      esd = round(2*(3/(4*base::pi)*(qc/d)^(1/e))^(1/3),5)) %>% # convert carbon per cell to equivalent spherical diameter *
+      diam = round(2*(3/(4*base::pi)*(qc/d)^(1/e))^(1/3),5)) %>% # convert carbon per cell to equivalent spherical diameter *
     arrange(date) %>%
     ungroup(cruise) 
 
@@ -93,10 +93,6 @@ meta <- full_join(seaflow %>% select(!cruise), env %>% select(!c(lat, lon)), by 
 
 ### plot cruise track
 # plot_geo(meta, lat = ~ lat, lon = ~ lon, color = ~ cruise, mode = "scatter") %>%  layout(geo = geo)
-
-
-
-
 
 
 
@@ -180,13 +176,14 @@ tz <- meta_distance_binned %>%
 # Note: using the unbinned data this time
 meta_gyre <- left_join(meta, tz) %>%
   group_by(cruise) %>%
-  mutate(raw_gyre = case_when(salinity >= sal_front ~ 0, 
+  mutate(raw_gyre = case_when(salinity > sal_front ~ 0, 
       TRUE ~ 1),
     gyre = case_when(lon > 190 & lat < 24 & raw_gyre == 1 ~ 0,
       lon > 190 & lat < 11 & raw_gyre == 0 ~ 1,
       lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0,
-      TRUE ~ raw_gyre))
-
+      lon < 190 & raw_gyre == 1 ~ 0,
+      TRUE ~ raw_gyre)) 
+      
 ### calculate distance (km) from boundaries of the NPSG for each cruise
 # location of boundaries
 id <- which(diff(meta_gyre$gyre) != 0)
@@ -195,6 +192,7 @@ boundaries <- meta_gyre[id,] %>%
   summarize(lat = mean(lat), 
     lon = mean(lon),
     cruise = unique(cruise))
+
 # Create `sf` class object to calcualte distance
 sf_tz <- sf::st_as_sf(boundaries, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
 sf_meta <- sf::st_as_sf(meta_gyre, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
@@ -211,69 +209,84 @@ for(c in unique(sf_meta$cruise)) {
 # transform to negative numbers when outside gyre
 meta_gyre_d  <- meta_gyre_d %>% 
   mutate(distance = case_when(gyre == 1 ~ distance,
-                              TRUE ~ - distance))
+                              TRUE ~ - distance),
+          gyre = case_when(gyre == 0 ~ "inside",
+                           TRUE ~ "outide"))
 
 ### plot gyre
-# plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c("deeppink4","cyan4")) %>% layout(geo = geo)
-
-
+# g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c("deeppink4","cyan4")) %>% layout(geo = geo)
+# plotly_IMAGE(g, format = "png", out_file = "map-gyre.png", width = 1000, height = 1000)
 
 
 #-----------------------
 # PLOTTING OVER DISTANCE (work in progress ...)
 #-----------------------
-d <- range(meta_gyre_d$distance)
+### Calculate mean and sd over binned distance from the edges of the NPSG
 resolution <- 50 # km (i.e data binned every 100 km)
 
-# by cruise
-p <- meta_gyre_d %>%
+d <- range(meta_gyre_d$distance)
+data_figure <- meta_gyre_d %>%
   filter(pop != "croco") %>%
- # filter(lat > 0) %>%
-  group_by(
-    cruise, 
-    pop,
+  group_by(cruise, pop,
     distance = cut(distance, seq(d[1],d[2], by = resolution), 
       labels = seq(d[1],d[2], by = resolution)[-1])) %>%
-  dplyr::summarize(
-    value = mean(n_per_uL, na.rm = TRUE),
-    sd = sd(n_per_uL, na.rm = TRUE)) %>%
-  mutate(distance = as.numeric(as.character(distance))) %>%
-  ggplot(aes(distance, value, col = pop),) + 
-    geom_line(lwd = 1) +  
-    geom_pointrange(aes(ymax = value + sd, ymin = value - sd)) +
+  dplyr::summarise_all(list(mean = function(x) mean(x, na.rm = TRUE), 
+    sd = function(x) sd(x, na.rm = TRUE))) %>%
+mutate(distance = as.numeric(as.character(distance)))
+
+
+### add East / South / North categorie
+data_figure <- data_figure %>%
+  mutate(region = case_when(lon_mean < 190 ~ "Northwest",
+    lat_mean > 21 & lon_mean > 190 ~ "Northeast",
+    lat_mean < 21 & lon_mean > 190 ~ "Southeast",
+    TRUE ~ "Southwest"))
+
+### choose a parameter
+para <- "n_per_uL"; ylab <- "abundance (cells / μL)"; name <- "abundance"
+# or
+para <- "c_per_uL"; ylab <- "biomass (μgC / L)"; name <- "biomass"
+# or
+para <- "diam"; ylab <- "equivalent spherical diameter (μm)"; name <- "diameter"
+
+
+
+### plotting parameter over distance per cruise
+fig1 <- data_figure %>%
+ select(region, cruise, pop, distance, contains(para)) %>%
+ rename(mean = contains("mean"), sd = contains("sd")) %>%
+  ggplot(aes(distance, mean,  col = pop)) + 
+    geom_line(aes(group = pop), lwd = 1) +  
+    geom_pointrange(aes(ymax = mean + sd, ymin = mean - sd)) +
     geom_vline(xintercept = 0, lty = 2) +
     #scale_y_continuous(trans='log10') +
-    facet_wrap(. ~  cruise, scale = "free") +
+    facet_wrap(. ~ cruise, scale = "free") +
     theme_bw() +
-    labs(y = "abundance (cells / μL)", x = "distance (km)")
+    labs(y = ylab, x = "distance (km)")
 
-print(p)
+print(fig1)
 
-# by population
-p <- meta_gyre_d %>%
-  group_by(
-    cruise, 
-    pop,
-    distance = cut(distance, seq(d[1],d[2], by = resolution), 
-      labels = seq(d[1],d[2], by = resolution)[-1])) %>%
-  dplyr::summarize(
-    value = mean(n_per_uL, na.rm = TRUE),
-    sd = sd(n_per_uL, na.rm = TRUE)) %>%
-  mutate(distance = as.numeric(as.character(distance))) %>%
-  filter(pop != "croco") %>%
-  filter(cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3") %>%
-  ggplot(aes(distance, value, col = cruise),) + 
-    geom_line(lwd = 1) +  
-    geom_pointrange(aes(ymax = value + sd, ymin = value - sd)) +
+### plotting parameter over distance per region
+fig2 <- data_figure %>%
+ select(region, cruise, pop, distance, contains(para)) %>%
+ rename(mean = contains("mean"), sd = contains("sd")) %>%
+  ggplot(aes(distance, mean,  col = pop)) + 
+    geom_line(aes(group = cruise), lwd = 1) +  
+    geom_pointrange(aes(ymax = mean + sd, ymin = mean - sd)) +
     geom_vline(xintercept = 0, lty = 2) +
     #scale_y_continuous(trans='log10') +
-    facet_grid(. ~  pop) +
-    theme_bw() + 
-    #labs(y = "biomass (μgC / L)", x = "distance (km)")
-    #labs(y = "abundance (cells / μL)", x = "distance (km)")
-    labs(y = "diameter (μm)", x = "distance (km)")
+    facet_grid(pop ~ region, scale = "free") +
+    theme_bw() +
+    labs(y = ylab, x = "distance (km)")
+
+print(fig2)
 
 
-png("~/figure.png", width = 2500, height = 800, res = 200)
-print(p)
+### save pot
+png(paste0(name,"-distance-cruise.png"), width = 2500, height = 800, res = 200)
+print(fig1)
+dev.off()
+
+png(paste0(name,"-distance-region.png"), width = 2500, height = 800, res = 200)
+print(fig2)
 dev.off()
