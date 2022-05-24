@@ -220,11 +220,19 @@ g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "sca
 plotly_IMAGE(g, format = "png", out_file = "figures/cruise-track.png", width = 1000, height = 1000)
 
 
+
+
+
+
+
+
+
+
 #-----------------------
 # PLOTTING OVER DISTANCE (work in progress ...)
 #-----------------------
 ### Calculate mean and sd over binned distance from the edges of the NPSG
-resolution <- 50 # km (i.e data binned every 100 km)
+resolution <- 20 # km (i.e data binned every 100 km)
 
 d <- range(meta_gyre_d$distance)
 data_figure <- meta_gyre_d %>%
@@ -258,7 +266,7 @@ fig1 <- data_figure %>%
  select(region, cruise, pop, distance, contains(para)) %>%
  rename(mean = contains("mean"), sd = contains("sd")) %>%
   ggplot(aes(distance, mean,  col = pop)) + 
-    geom_line(aes(group = pop), lwd = 1) +  
+    geom_point(aes(group = pop), lwd = 1) +  
     geom_pointrange(aes(ymax = mean + sd, ymin = mean - sd), alpha = 0.5) +
     geom_vline(xintercept = 0, lty = 2) +
     #scale_y_continuous(trans='log10') +
