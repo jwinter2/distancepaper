@@ -6,6 +6,8 @@ library(sf)
 # Francois
 setwd("~/Documents/Codes/distancepaper") # path to github repository
 
+# Jordan
+setwd("~/Downloads/distancepaper/")
 
 #-----------------
 # For plotting map
@@ -145,7 +147,7 @@ meta_distance_binned <- meta_distance %>%
 
 
 ### Find abrupt changes in salinity (modified from Follett et al., 2021 Limnology & Oceanography 66 - 2442:2454, doi: 10.1002/lno.11763)
-# calculate change iof salinity over distance, using smooth salinity data
+# calculate change of salinity over distance, using smooth salinity data
 smooth <- 0.9 # smoothing parameter
 meta_distance_binned <- meta_distance_binned %>% 
   filter(!is.na(salinity) & !is.na(distance)) %>% # remove NA's for smoothing
@@ -193,7 +195,7 @@ boundaries <- meta_gyre[id,] %>%
     lon = mean(lon),
     cruise = unique(cruise))
 
-# Create `sf` class object to calcualte distance
+# Create `sf` class object to calculate distance
 sf_tz <- sf::st_as_sf(boundaries, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
 sf_meta <- sf::st_as_sf(meta_gyre, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
 
@@ -235,7 +237,7 @@ data_figure <- meta_gyre_d %>%
 mutate(distance = as.numeric(as.character(distance)))
 
 
-### add East / South / North categorie
+### add East / South / North categories
 data_figure <- data_figure %>%
   mutate(region = case_when(lon_mean < 190 ~ "Northwest",
     lat_mean > 21 & lon_mean > 190 ~ "Northeast",
@@ -277,7 +279,7 @@ fig2 <- data_figure %>%
     theme_bw() +
     labs(y = ylab, x = "distance (km)")
 
-### save pot
+### save plot
 png(paste0("figures/",name,"-distance-cruise.png"), width = 2500, height = 1600, res = 200)
 print(fig1)
 dev.off()
