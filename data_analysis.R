@@ -289,6 +289,27 @@ fig3 <- data_figure %>%
   theme_bw() +
   labs(y = "count", x = ylab)
 
+### plotting histogram of parameter inside vs outside the gyre per cruise
+fig4 <- data_figure %>%
+  select(region, cruise, pop, gyre, contains(para)) %>%
+  rename(mean = contains("mean")) %>%
+  ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
+  geom_histogram(alpha = 0.4, bins = 30) +  
+  facet_wrap(pop ~ cruise, scale = "free", ncol = 11) +
+  theme_bw() +
+  labs(y = "count", x = ylab)
+
+### plotting histogram of parameter inside vs outside the gyre per region
+fig5 <- data_figure %>%
+  select(region, cruise, pop, gyre, contains(para)) %>%
+  rename(mean = contains("mean")) %>%
+  ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
+  geom_histogram(alpha = 0.4, bins = 100) +  
+  facet_wrap(pop ~ region, scale = "free") +
+  theme_bw() +
+  labs(y = "count", x = ylab)
+
+
 ### save plot
 png(paste0("figures/",name,"-distance-cruise.png"), width = 2500, height = 1600, res = 200)
 print(fig1)
@@ -301,3 +322,12 @@ dev.off()
 png(paste0("figures/",name,"-gyre-hist.png"), width = 2500, height = 1200, res = 200)
 print(fig3)
 dev.off()
+
+png(paste0("figures/",name,"-gyre-hist-cruise.png"), width = 2500, height = 800, res = 200)
+print(fig4)
+dev.off()
+
+png(paste0("figures/",name,"-gyre-hist-region.png"), width = 2500, height = 1200, res = 200)
+print(fig5)
+dev.off()
+
