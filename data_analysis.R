@@ -64,7 +64,7 @@ env <- env %>%
 #-------------------
 # Phytoplankton data
 #-------------------
-seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-18.parquet") 
+seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-24.parquet") 
 
 # Note for conversion from carbon per cell to equivalent spherical diameter
 # Menden-Deuer, S. & Lessard, E. J. Carbon to volume relationships for dinoflagellates, diatoms, and other protist plankton. Limnol. Oceanogr. 45, 569–579 (2000).
