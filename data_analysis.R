@@ -284,7 +284,7 @@ fig3 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(alpha = 0.4, bins = 100, position = "identity") +  
+  geom_histogram(alpha = 0.4, bins = 100, position = "identity") +
   facet_wrap(pop ~ ., scale = "free", nrow = 3) +
   theme_bw() +
   labs(y = "count", x = ylab)
@@ -304,7 +304,7 @@ fig5 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(alpha = 0.4, bins = 100, position = "identity") +  
+  geom_histogram(alpha = 0.4, bins = 30, position = "identity") +  
   facet_wrap(pop ~ region, scale = "free") +
   theme_bw() +
   labs(y = "count", x = ylab)
