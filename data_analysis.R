@@ -213,7 +213,7 @@ meta_gyre_d  <- meta_gyre_d %>%
   mutate(distance = case_when(gyre == 1 ~ distance,
                               TRUE ~ - distance),
           gyre = case_when(gyre == 0 ~ "inside",
-                           TRUE ~ "outide"))
+                           TRUE ~ "outside"))
 
 ### plot gyre
 g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c("deeppink4","cyan4")) %>% layout(geo = geo)
@@ -229,7 +229,7 @@ resolution <- 50 # km (i.e data binned every 100 km)
 d <- range(meta_gyre_d$distance)
 data_figure <- meta_gyre_d %>%
   filter(pop != "croco") %>%
-  group_by(cruise, pop,
+  group_by(cruise, pop, gyre,
     distance = cut(distance, seq(d[1],d[2], by = resolution), 
       labels = seq(d[1],d[2], by = resolution)[-1])) %>%
   dplyr::summarise_all(list(mean = function(x) mean(x, na.rm = TRUE), 
@@ -279,6 +279,16 @@ fig2 <- data_figure %>%
     theme_bw() +
     labs(y = ylab, x = "distance (km)")
 
+### plotting histogram of parameter inside vs outside the gyre
+fig3 <- data_figure %>%
+  select(region, cruise, pop, gyre, contains(para)) %>%
+  rename(mean = contains("mean")) %>%
+  ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
+  geom_histogram(alpha = 0.4, bins = 100) +  
+  facet_wrap(pop ~ ., scale = "free", nrow = 3) +
+  theme_bw() +
+  labs(y = "count", x = ylab)
+
 ### save plot
 png(paste0("figures/",name,"-distance-cruise.png"), width = 2500, height = 1600, res = 200)
 print(fig1)
@@ -286,4 +296,8 @@ dev.off()
 
 png(paste0("figures/",name,"-distance-region.png"), width = 2500, height = 1200, res = 200)
 print(fig2)
+dev.off()
+
+png(paste0("figures/",name,"-gyre-hist.png"), width = 2500, height = 1200, res = 200)
+print(fig3)
 dev.off()
