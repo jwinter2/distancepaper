@@ -148,7 +148,10 @@ meta_distance_binned <- meta_distance %>%
 
 ### Find abrupt changes in salinity (modified from Follett et al., 2021 Limnology & Oceanography 66 - 2442:2454, doi: 10.1002/lno.11763)
 # calculate change of salinity over distance, using smooth salinity data
-smooth <- 0.9 # smoothing parameter
+smooth_up <- 0.8 # upper smoothing parameter
+smooth_down <- 0.6 # lower smoothing parameter
+smooth <- mean(c(smooth_up,smooth_down)) # mean smoothing parameter
+
 meta_distance_binned <- meta_distance_binned %>% 
   filter(!is.na(salinity) & !is.na(distance)) %>% # remove NA's for smoothing
   group_by(cruise) %>%
@@ -156,22 +159,35 @@ meta_distance_binned <- meta_distance_binned %>%
     date = date, lat = lat, lon = lon, distance = distance, salinity = salinity,
     smooth_salinity = smooth.spline(distance, salinity, all.knots= TRUE, spar = smooth)$y, # smooth data to remove noisy changes in salinity
     derivative_salinity = c(NA, abs(diff(smooth_salinity) / as.numeric(diff(distance)))), # calculate the rate of change of salinity over distance
-    sal_front = case_when(derivative_salinity > quantile(derivative_salinity, 0.9, na.rm = TRUE) ~ smooth_salinity))   # find time of rapid changes in salinity
+    sal_front = case_when(derivative_salinity > quantile(derivative_salinity, 0.9, na.rm = TRUE) ~ smooth_salinity),  # find time of rapid changes in salinity
+    
+    smooth_salinity_up = smooth.spline(distance, salinity, all.knots= TRUE, spar = smooth_up)$y, # smooth data to remove noisy changes in salinity
+    derivative_salinity_up = c(NA, abs(diff(smooth_salinity_up) / as.numeric(diff(distance)))), # calculate the rate of change of salinity over distance
+    sal_front_up = case_when(derivative_salinity_up > quantile(derivative_salinity_up, 0.9, na.rm = TRUE) ~ smooth_salinity_up),   # find time of rapid changes in salinity
+    
+    smooth_salinity_down = smooth.spline(distance, salinity, all.knots= TRUE, spar = smooth_down)$y, # smooth data to remove noisy changes in salinity
+    derivative_salinity_down = c(NA, abs(diff(smooth_salinity_down) / as.numeric(diff(distance)))), # calculate the rate of change of salinity over distance
+    sal_front_down = case_when(derivative_salinity_down > quantile(derivative_salinity_down, 0.9, na.rm = TRUE) ~ smooth_salinity_down))   # find time of rapid changes in salinity
  
 ### Estimate salinity boundaries of NPSG's transition zone
 # only look at the closest front to the NPSG's salinity (mean salinity ~ 35 psu) 
 tz <- meta_distance_binned %>% 
     group_by(cruise) %>% 
-    summarize_at(vars(sal_front), function(x) max(x, na.rm = TRUE)) 
+    summarize(sal_front = max(sal_front, na.rm = TRUE),
+      sal_front_up = max(sal_front_up, na.rm = TRUE),
+      sal_front_down = max(sal_front_down, na.rm = TRUE)) 
 
  
 ### plot locations of all abrupt changes of salinity
-# meta_distance_binned %>%  ggplot() + 
-#   geom_point(aes(distance, salinity)) + 
-#   geom_point(aes(distance, smooth_salinity), col = 2) + 
-#   geom_hline(data = tz, aes( yintercept = sal_front), col = 3) + 
-#   facet_wrap(. ~ cruise, scale = "free_x")
-
+meta_distance_binned %>%  ggplot() + 
+  geom_point(aes(distance, salinity)) + 
+  geom_point(aes(distance, smooth_salinity), col = 2) + 
+  geom_point(aes(distance, smooth_salinity_down), col = 3) + 
+  geom_point(aes(distance, smooth_salinity_up), col = 4) + 
+  geom_hline(data = tz, aes( yintercept = sal_front), col = 2) + 
+  geom_hline(data = tz, aes( yintercept = sal_front_down), col = 3) + 
+  geom_hline(data = tz, aes( yintercept = sal_front_up), col = 4) + 
+  facet_wrap(. ~ cruise, scale = "free_x")
 
 
 ### Identify locations inside or outside the gyre (0 = gyre; 1 = outside gyre)
@@ -184,8 +200,22 @@ meta_gyre <- left_join(meta, tz) %>%
       lon > 190 & lat < 11 & raw_gyre == 0 ~ 1,
       lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0,
       lon < 190 & raw_gyre == 1 ~ 0,
-      TRUE ~ raw_gyre)) 
-      
+      TRUE ~ raw_gyre)) %>%
+  mutate(raw_gyre_down = case_when(salinity > sal_front_down ~ 0, 
+      TRUE ~ 1),
+    gyre_down = case_when(lon > 190 & lat < 24 & raw_gyre_down == 1 ~ 0,
+      lon > 190 & lat < 11 & raw_gyre_down == 0 ~ 1,
+      lon < 220 & lat < 33 & lat > 21 & raw_gyre_down == 1 ~ 0,
+      lon < 190 & raw_gyre_down == 1 ~ 0,
+      TRUE ~ raw_gyre_down)) %>%
+  mutate(raw_gyre_up = case_when(salinity > sal_front_up ~ 0, 
+      TRUE ~ 1),
+    gyre_up = case_when(lon > 190 & lat < 24 & raw_gyre_up == 1 ~ 0,
+      lon > 190 & lat < 11 & raw_gyre_up == 0 ~ 1,
+      lon < 220 & lat < 33 & lat > 21 & raw_gyre_up == 1 ~ 0,
+      lon < 190 & raw_gyre_up == 1 ~ 0,
+      TRUE ~ raw_gyre_up))
+
 ### calculate distance (km) from boundaries of the NPSG for each cruise
 # location of boundaries
 id <- which(diff(meta_gyre$gyre) != 0)
@@ -195,7 +225,21 @@ boundaries <- meta_gyre[id,] %>%
     lon = mean(lon),
     cruise = unique(cruise))
 
-# Create `sf` class object to calculate distance
+id_down <- which(diff(meta_gyre$gyre_down) != 0)
+boundaries_down <- meta_gyre[id_down,] %>% 
+  group_by(date) %>% 
+  summarize(lat = mean(lat), 
+    lon = mean(lon),
+    cruise = unique(cruise))
+
+id_up <- which(diff(meta_gyre$gyre_up) != 0)
+boundaries_up <- meta_gyre[id_up,] %>% 
+  group_by(date) %>% 
+  summarize(lat = mean(lat), 
+    lon = mean(lon),
+    cruise = unique(cruise))
+
+### calculate distance from the front
 sf_tz <- sf::st_as_sf(boundaries, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
 sf_meta <- sf::st_as_sf(meta_gyre, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
 
@@ -207,6 +251,12 @@ for(c in unique(sf_meta$cruise)) {
     mutate(distance = apply(sf::st_distance(sf_meta_g, sf_tz), 1, function(x) min(x) / 1000)) 
   meta_gyre_d <- bind_rows(meta_gyre_d, meta_g)
 }
+
+# calculate uncertainties in front location
+sf_tz_down <- sf::st_as_sf(boundaries_down, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
+sf_tz_up <- sf::st_as_sf(boundaries_up, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
+boundaries <- boundaries %>% mutate(up = apply(sf::st_distance(sf_tz, sf_tz_up), 1, function(x) min(x) / 1000), 
+  down = apply(sf::st_distance(sf_tz, sf_tz_down), 1, function(x) min(x) / 1000)) 
 
 # transform to negative numbers when outside gyre
 meta_gyre_d  <- meta_gyre_d %>% 
@@ -222,24 +272,18 @@ plotly_IMAGE(g, format = "png", out_file = "figures/cruise-track.png", width = 1
 
 
 
-
-
-
-
-
-
 #-----------------------
 # PLOTTING OVER DISTANCE (work in progress ...)
 #-----------------------
 ### Calculate mean and sd over binned distance from the edges of the NPSG
-resolution <- 20 # km (i.e data binned every 100 km)
+res <- 100 # km (i.e data binned every 100 km)
 
 d <- range(meta_gyre_d$distance)
 data_figure <- meta_gyre_d %>%
   filter(pop != "croco") %>%
   group_by(cruise, pop, gyre,
-    distance = cut(distance, seq(d[1],d[2], by = resolution), 
-      labels = seq(d[1],d[2], by = resolution)[-1])) %>%
+    distance = cut(distance, seq(d[1],d[2], by = res), 
+      labels = seq(d[1],d[2], by = res)[-1])) %>%
   dplyr::summarise_all(list(mean = function(x) mean(x, na.rm = TRUE), 
     sd = function(x) sd(x, na.rm = TRUE))) %>%
 mutate(distance = as.numeric(as.character(distance)))
@@ -252,6 +296,15 @@ data_figure <- data_figure %>%
     lat_mean < 21 & lon_mean > 190 ~ "Southeast",
     TRUE ~ "Southwest"))
 
+### uncertainties in front location
+binning <- resolution + res # uncertainties due to binning
+front_uncertainties <- boundaries %>% group_by(cruise) %>%
+  summarize_all(mean) %>%
+  mutate(up = case_when(up < binning ~ binning, 
+      TRUE ~ up),
+    down = case_when(down < binning ~ - binning, 
+    TRUE ~ - down))
+
 ### choose a parameter
 para <- "n_per_uL"; ylab <- "abundance (cells / μL)"; name <- "abundance"
 # or
@@ -261,15 +314,18 @@ para <- "diam"; ylab <- "equivalent spherical diameter (μm)"; name <- "diameter
 
 
 
+
+
+
 ### plotting parameter over distance per cruise
 fig1 <- data_figure %>%
  select(region, cruise, pop, distance, contains(para)) %>%
  rename(mean = contains("mean"), sd = contains("sd")) %>%
   ggplot(aes(distance, mean,  col = pop)) + 
-    geom_point(aes(group = pop), lwd = 1) +  
-    geom_pointrange(aes(ymax = mean + sd, ymin = mean - sd), alpha = 0.5) +
-    geom_vline(xintercept = 0, lty = 2) +
-    #scale_y_continuous(trans='log10') +
+    geom_line(aes(group = pop), lwd = 1) +  
+    geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
+    geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+    # geom_vline(xintercept = 0, lty = 2) +
     facet_wrap(. ~ cruise, scale = "free") +
     theme_bw() +
     labs(y = ylab, x = "distance (km)")
@@ -280,7 +336,7 @@ fig2 <- data_figure %>%
  rename(mean = contains("mean"), sd = contains("sd")) %>%
   ggplot(aes(distance, mean,  col = pop)) + 
     geom_line(aes(group = cruise), lwd = 1) +  
-    geom_pointrange(aes(ymax = mean + sd, ymin = mean - sd), alpha = 0.5) +
+    geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
     geom_vline(xintercept = 0, lty = 2) +
     #scale_y_continuous(trans='log10') +
     facet_grid(pop ~ region, scale = "free") +
@@ -292,18 +348,19 @@ fig3 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(alpha = 0.4, bins = 100, position = "identity") +
-  facet_wrap(pop ~ ., scale = "free", nrow = 3) +
+  geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 100, position = "identity") +
+  facet_grid(pop ~ ., scale = "free") +
   theme_bw() +
-  labs(y = "count", x = ylab)
+  #scale_x_continuous(trans='log10') +
+  labs(x = ylab)
 
 ### plotting histogram of parameter inside vs outside the gyre per cruise
 fig4 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(alpha = 0.4, bins = 30, position = "identity") +  
-  facet_wrap(pop ~ cruise, scale = "free", ncol = 11) +
+  geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 10, position = "identity") +  
+  facet_grid(pop ~ cruise, scale = "free_y") +
   theme_bw() +
   labs(y = "count", x = ylab)
 
@@ -312,10 +369,10 @@ fig5 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(alpha = 0.4, bins = 30, position = "identity") +  
-  facet_wrap(pop ~ region, scale = "free") +
+  geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 10, position = "identity") +  
+  facet_grid(pop ~ region, scale = "free_y") +
   theme_bw() +
-  labs(y = "count", x = ylab)
+  labs(x = ylab)
 
 
 ### save plot
