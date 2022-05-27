@@ -297,7 +297,7 @@ data_figure <- data_figure %>%
     TRUE ~ "Southwest"))
 
 ### uncertainties in front location
-binning <- resolution + res # uncertainties due to binning
+binning <- res # uncertainties due to binning
 front_uncertainties <- boundaries %>% group_by(cruise) %>%
   summarize_all(mean) %>%
   mutate(up = case_when(up < binning ~ binning, 
