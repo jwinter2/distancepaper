@@ -351,7 +351,7 @@ fig3 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 100, position = "identity") +
+  geom_density(aes(y = ..scaled..), alpha = 0.4, bins = 100, position = "identity") +
   facet_grid(pop ~ ., scale = "free") +
   scale_color_manual(values=gyre_cols) +
   scale_fill_manual(values=gyre_cols) +
@@ -364,19 +364,19 @@ fig4 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 10, position = "identity") +  
+  geom_density(aes(y = ..scaled..), alpha = 0.4, bins = 10, position = "identity") +  
   facet_grid(pop ~ cruise, scale = "free_y") +
   scale_color_manual(values=gyre_cols) +
   scale_fill_manual(values=gyre_cols) +
   theme_bw() +
-  labs(y = "count", x = ylab)
+  labs(x = ylab)
 
 ### plotting histogram of parameter inside vs outside the gyre per region
 fig5 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 10, position = "identity") +  
+  geom_density(aes(y = ..scaled..), alpha = 0.4, bins = 10, position = "identity") +  
   facet_grid(pop ~ region, scale = "free_y") +
   scale_color_manual(values=gyre_cols) +
   scale_fill_manual(values=gyre_cols) +
@@ -431,7 +431,7 @@ fig7 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 50, position = "identity") +
+  geom_density(aes(y = ..scaled..), alpha = 0.4, bins = 50, position = "identity") +
   scale_color_manual(values=gyre_cols) +
   scale_fill_manual(values=gyre_cols) +
   theme_bw() +
