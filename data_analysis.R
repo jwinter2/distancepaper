@@ -291,10 +291,14 @@ mutate(distance = as.numeric(as.character(distance)))
 
 ### add East / South / North categories
 data_figure <- data_figure %>%
-  mutate(region = case_when(lon_mean < 190 ~ "Northwest",
-    lat_mean > 21 & lon_mean > 190 ~ "Northeast",
-    lat_mean < 21 & lon_mean > 190 ~ "Southeast",
+  mutate(region = case_when(cruise == "SR1917" & lon_mean < 220 | cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3" | cruise == "KM1712" | cruise == "KM1713" ~ "Northwest",
+    cruise == "SR1917" & lon_mean > 220 | cruise == "KM1502" | cruise == "TN271" | cruise == "TN398" | cruise == "Gradients 4" & lat_mean > 22 ~ "Northeast",
+    cruise == "Gradients 4" & lat_mean < 22 | cruise == "KM1923" ~ "Southeast",
     TRUE ~ "Southwest"))
+
+###### FOR NOW: don't use SR1917 and TN271
+data_figure <- subset(data_figure, cruise != "SR1917" & cruise != "TN271")
+
 
 ### uncertainties in front location
 binning <- res # uncertainties due to binning
@@ -351,8 +355,8 @@ fig3 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_density(aes(y = ..scaled..), alpha = 0.4, bins = 100, position = "identity") +
-  facet_grid(pop ~ ., scale = "free") +
+  geom_histogram(aes(y = ..count../sum(..count..)), alpha = 0.4, bins=20, position = "identity") +
+  facet_grid(pop ~ ., scale = "fixed") +
   scale_color_manual(values=gyre_cols) +
   scale_fill_manual(values=gyre_cols) +
   theme_bw() +
@@ -364,20 +368,23 @@ fig4 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_density(aes(y = ..scaled..), alpha = 0.4, bins = 10, position = "identity") +  
-  facet_grid(pop ~ cruise, scale = "free_y") +
+  geom_histogram(aes(y = ..count../sum(..count..)), alpha = 0.4, bins=20, position = "identity") +  
+  facet_grid(pop ~ cruise, scale = "fixed") +
   scale_color_manual(values=gyre_cols) +
   scale_fill_manual(values=gyre_cols) +
   theme_bw() +
   labs(x = ylab)
 
 ### plotting histogram of parameter inside vs outside the gyre per region
+if (para == "c_per_uL"){ # get rid of outliers for easier visualization
+  data_figure <- subset(data_figure, c_per_uL_mean < 60)
+}
 fig5 <- data_figure %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_density(aes(y = ..scaled..), alpha = 0.4, bins = 10, position = "identity") +  
-  facet_grid(pop ~ region, scale = "free_y") +
+  geom_histogram(aes(y = ..count../sum(..count..)), alpha = 0.4, bins = 20, position = "identity") +  
+  facet_grid(pop ~ region, scale = "fixed") +
   scale_color_manual(values=gyre_cols) +
   scale_fill_manual(values=gyre_cols) +
   theme_bw() +
@@ -410,7 +417,7 @@ dev.off()
 
 para <- "NO3_NO2"; ylab <- "nitrate and nitrite concentration (μg / L)"; name <- "nitrate"
 para <- "PO4"; ylab <- "phosphate concentration (μg / L)"; name <- "phosphate"
-para <- "SiO4"; ylab <- "silicate concentration (μg / L)"; name <- "silicate"
+#para <- "SiO4"; ylab <- "silicate concentration (μg / L)"; name <- "silicate"
 
 ### plotting parameter over distance per cruise
 
@@ -450,21 +457,42 @@ dev.off()
 
 ### plotting nutrients against phytoplankton diameter
 
+### take mean diameter per day
+data_figure$day <- substr(data_figure$date_mean, 1, 10)
+diam_data <- data_figure %>%
+  group_by(cruise, pop, day, gyre) %>%
+  dplyr::summarise_at(c("diam_mean", "c_per_uL_mean", "SiO4_mean", "NO3_NO2_mean", "PO4_mean"), list(mean), na.rm=T)
 
-### plotting parameter over distance per cruise
-
-fig8 <- data_figure %>%
-  select(region, cruise, pop, diam_mean, contains(para)) %>%
+fig8 <- diam_data %>%
+  select(cruise, pop, gyre, diam_mean, contains(para)) %>%
   rename(mean = contains(paste0(para, "_", "mean")), sd = contains("sd")) %>%
-  ggplot(aes(mean, diam_mean)) + 
+  ggplot(aes(mean, diam_mean, col = gyre)) + 
   geom_point() +
   theme_bw() +
+  scale_color_manual(values=gyre_cols) +
   facet_wrap(pop ~ ., scale = "free") +
-  labs(x = ylab, y = "diameter (μm)")
+  labs(x = ylab, y = "daily diameter (μm)")
 
 
-### save plot
+### plotting nutrients against phytoplankton biomass
+
+fig9 <- diam_data %>%
+  select(cruise, pop, gyre, c_per_uL_mean, contains(para)) %>%
+  rename(mean = contains(paste0(para, "_", "mean")), sd = contains("sd")) %>%
+  ggplot(aes(mean, c_per_uL_mean, col = gyre)) + 
+  geom_point() +
+  theme_bw() +
+  scale_color_manual(values=gyre_cols) +
+  facet_wrap(pop ~ ., scale = "free") +
+  labs(x = ylab, y = "biomass (μgC / L)")
+
+
+### save plots
 
 png(paste0("figures/",name,"-diam.png"), width = 2500, height = 1200, res = 200)
 print(fig8)
+dev.off()
+
+png(paste0("figures/",name,"-biomass.png"), width = 2500, height = 1200, res = 200)
+print(fig9)
 dev.off()
