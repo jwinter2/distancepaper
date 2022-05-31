@@ -314,9 +314,6 @@ para <- "diam"; ylab <- "equivalent spherical diameter (μm)"; name <- "diameter
 
 
 
-
-
-
 ### plotting parameter over distance per cruise
 fig1 <- data_figure %>%
  select(region, cruise, pop, distance, contains(para)) %>%
@@ -396,3 +393,67 @@ png(paste0("figures/",name,"-gyre-hist-region.png"), width = 2500, height = 1200
 print(fig5)
 dev.off()
 
+
+### plotting nutrients
+
+para <- "NO3_NO2"; ylab <- "nitrate and nitrite concentration (μg / L)"; name <- "nitrate"
+para <- "PO4"; ylab <- "phosphate concentration (μg / L)"; name <- "phosphate"
+para <- "SiO4"; ylab <- "silicate concentration (μg / L)"; name <- "silicate"
+
+### plotting parameter over distance per cruise
+
+fig6 <- data_figure %>%
+  select(region, cruise, pop, distance, contains(para)) %>%
+  rename(mean = contains("mean"), sd = contains("sd")) %>%
+  ggplot(aes(distance, mean)) + 
+  geom_point() +
+  geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  theme_bw() +
+  facet_wrap(. ~ cruise, scale = "free") +
+  labs(y = ylab, x = "distance (km)")
+
+### plotting histogram of parameter inside vs outside the gyre
+
+fig7 <- data_figure %>%
+  select(region, cruise, pop, gyre, contains(para)) %>%
+  rename(mean = contains("mean")) %>%
+  ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
+  geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 50, position = "identity") +
+  theme_bw() +
+  labs(x = ylab)
+
+### save plot
+
+png(paste0("figures/",name,"-gyre-cruise.png"), width = 2500, height = 1200, res = 200)
+print(fig6)
+dev.off()
+  
+png(paste0("figures/",name,"-gyre-hist.png"), width = 2500, height = 1200, res = 200)
+print(fig7)
+dev.off()
+
+
+### plotting nutrients against phytoplankton diameter
+
+para <- "NO3_NO2"; ylab <- "nitrate and nitrite concentration (μg / L)"; name <- "nitrate"
+para <- "PO4"; ylab <- "phosphate concentration (μg / L)"; name <- "phosphate"
+para <- "SiO4"; ylab <- "silicate concentration (μg / L)"; name <- "silicate"
+
+### plotting parameter over distance per cruise
+
+fig8 <- data_figure %>%
+  select(region, cruise, pop, diam_mean, contains(para)) %>%
+  rename(mean = contains(paste0(para, "_", "mean")), sd = contains("sd")) %>%
+  ggplot(aes(mean, diam_mean)) + 
+  geom_point() +
+  theme_bw() +
+  facet_wrap(pop ~ ., scale = "free") +
+  labs(x = ylab, y = "diameter (μm)")
+
+
+### save plot
+
+png(paste0("figures/",name,"-diam.png"), width = 2500, height = 1200, res = 200)
+print(fig8)
+dev.off()
