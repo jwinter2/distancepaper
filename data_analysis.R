@@ -266,7 +266,7 @@ meta_gyre_d  <- meta_gyre_d %>%
                            TRUE ~ "outside"))
 
 ### plot gyre
-g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c("deeppink4","cyan4")) %>% layout(geo = geo)
+g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c(viridis(5)[1], viridis(5)[4])) %>% layout(geo = geo)
 plotly_IMAGE(g, format = "png", out_file = "figures/cruise-track.png", width = 1000, height = 1000)
 
 
@@ -313,6 +313,10 @@ para <- "c_per_uL"; ylab <- "biomass (μgC / L)"; name <- "biomass"
 para <- "diam"; ylab <- "equivalent spherical diameter (μm)"; name <- "diameter"
 
 
+### set colors
+pop_cols <- c("prochloro" = viridis(3)[1], "picoeuk" = viridis(3)[2], "synecho" = viridis(3)[3])
+gyre_cols <- c("inside" = viridis(5)[1], "outside" = viridis(5)[4])
+
 
 ### plotting parameter over distance per cruise
 fig1 <- data_figure %>%
@@ -323,6 +327,7 @@ fig1 <- data_figure %>%
     geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
     geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
     # geom_vline(xintercept = 0, lty = 2) +
+    scale_color_manual(values=pop_cols) +
     facet_wrap(. ~ cruise, scale = "free") +
     theme_bw() +
     labs(y = ylab, x = "distance (km)")
@@ -336,6 +341,7 @@ fig2 <- data_figure %>%
     geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
     geom_vline(xintercept = 0, lty = 2) +
     #scale_y_continuous(trans='log10') +
+    scale_color_manual(values=pop_cols) +
     facet_grid(pop ~ region, scale = "free") +
     theme_bw() +
     labs(y = ylab, x = "distance (km)")
@@ -347,6 +353,8 @@ fig3 <- data_figure %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
   geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 100, position = "identity") +
   facet_grid(pop ~ ., scale = "free") +
+  scale_color_manual(values=gyre_cols) +
+  scale_fill_manual(values=gyre_cols) +
   theme_bw() +
   #scale_x_continuous(trans='log10') +
   labs(x = ylab)
@@ -358,6 +366,8 @@ fig4 <- data_figure %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
   geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 10, position = "identity") +  
   facet_grid(pop ~ cruise, scale = "free_y") +
+  scale_color_manual(values=gyre_cols) +
+  scale_fill_manual(values=gyre_cols) +
   theme_bw() +
   labs(y = "count", x = ylab)
 
@@ -368,6 +378,8 @@ fig5 <- data_figure %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
   geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 10, position = "identity") +  
   facet_grid(pop ~ region, scale = "free_y") +
+  scale_color_manual(values=gyre_cols) +
+  scale_fill_manual(values=gyre_cols) +
   theme_bw() +
   labs(x = ylab)
 
@@ -420,6 +432,8 @@ fig7 <- data_figure %>%
   rename(mean = contains("mean")) %>%
   ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
   geom_histogram(aes(y = ..density..), alpha = 0.4, bins = 50, position = "identity") +
+  scale_color_manual(values=gyre_cols) +
+  scale_fill_manual(values=gyre_cols) +
   theme_bw() +
   labs(x = ylab)
 
@@ -436,9 +450,6 @@ dev.off()
 
 ### plotting nutrients against phytoplankton diameter
 
-para <- "NO3_NO2"; ylab <- "nitrate and nitrite concentration (μg / L)"; name <- "nitrate"
-para <- "PO4"; ylab <- "phosphate concentration (μg / L)"; name <- "phosphate"
-para <- "SiO4"; ylab <- "silicate concentration (μg / L)"; name <- "silicate"
 
 ### plotting parameter over distance per cruise
 
