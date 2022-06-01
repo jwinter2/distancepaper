@@ -66,7 +66,8 @@ env <- env %>%
 #-------------------
 # Phytoplankton data
 #-------------------
-seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-24.parquet") 
+seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-24.parquet") %>%
+  filter(pop != "croco") # remove this population as it is only found in low abundance in too few cruises
 
 # Note for conversion from carbon per cell to equivalent spherical diameter
 # Menden-Deuer, S. & Lessard, E. J. Carbon to volume relationships for dinoflagellates, diatoms, and other protist plankton. Limnol. Oceanogr. 45, 569–579 (2000).
@@ -179,15 +180,15 @@ tz <- meta_distance_binned %>%
 
  
 ### plot locations of all abrupt changes of salinity
-meta_distance_binned %>%  ggplot() + 
-  geom_point(aes(distance, salinity)) + 
-  geom_point(aes(distance, smooth_salinity), col = 2) + 
-  geom_point(aes(distance, smooth_salinity_down), col = 3) + 
-  geom_point(aes(distance, smooth_salinity_up), col = 4) + 
-  geom_hline(data = tz, aes( yintercept = sal_front), col = 2) + 
-  geom_hline(data = tz, aes( yintercept = sal_front_down), col = 3) + 
-  geom_hline(data = tz, aes( yintercept = sal_front_up), col = 4) + 
-  facet_wrap(. ~ cruise, scale = "free_x")
+# meta_distance_binned %>%  ggplot() + 
+#   geom_point(aes(distance, salinity)) + 
+#   geom_point(aes(distance, smooth_salinity), col = 2) + 
+#   geom_point(aes(distance, smooth_salinity_down), col = 3) + 
+#   geom_point(aes(distance, smooth_salinity_up), col = 4) + 
+#   geom_hline(data = tz, aes( yintercept = sal_front), col = 2) + 
+#   geom_hline(data = tz, aes( yintercept = sal_front_down), col = 3) + 
+#   geom_hline(data = tz, aes( yintercept = sal_front_up), col = 4) + 
+#   facet_wrap(. ~ cruise, scale = "free_x")
 
 
 ### Identify locations inside or outside the gyre (0 = gyre; 1 = outside gyre)
@@ -214,7 +215,10 @@ meta_gyre <- left_join(meta, tz) %>%
       lon > 190 & lat < 11 & raw_gyre_up == 0 ~ 1,
       lon < 220 & lat < 33 & lat > 21 & raw_gyre_up == 1 ~ 0,
       lon < 190 & raw_gyre_up == 1 ~ 0,
-      TRUE ~ raw_gyre_up))
+      TRUE ~ raw_gyre_up)) %>%
+  select(!c(raw_gyre, raw_gyre_up, raw_gyre_down, # remove unnecessary columns
+    sal_front, sal_front_up, sal_front_down))
+
 
 ### calculate distance (km) from boundaries of the NPSG for each cruise
 # location of boundaries
@@ -248,7 +252,8 @@ for(c in unique(sf_meta$cruise)) {
   sf_tz_g <- sf_tz %>% filter(cruise == c)
   sf_meta_g <- sf_meta %>% filter(cruise == c)
   meta_g <- meta_gyre %>% filter(cruise == c) %>%
-    mutate(distance = apply(sf::st_distance(sf_meta_g, sf_tz), 1, function(x) min(x) / 1000)) 
+    mutate(distance = apply(sf::st_distance(sf_meta_g, sf_tz), 1, function(x) min(x) / 1000)) %>%
+    select(!c(gyre_down, gyre_up))
   meta_gyre_d <- bind_rows(meta_gyre_d, meta_g)
 }
 
@@ -266,27 +271,67 @@ meta_gyre_d  <- meta_gyre_d %>%
                            TRUE ~ "outside"))
 
 ### plot gyre
-g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c(viridis(5)[1], viridis(5)[4])) %>% layout(geo = geo)
-plotly_IMAGE(g, format = "png", out_file = "figures/cruise-track.png", width = 1000, height = 1000)
+g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c("deeppink4","cyan4")) %>% layout(geo = geo)
+#plotly_IMAGE(g, format = "png", out_file = "figures/cruise-track.png", width = 1000, height = 1000)
 
 
 
 
-#-----------------------
-# PLOTTING OVER DISTANCE (work in progress ...)
-#-----------------------
+
+
+
+
+
+
+
+
+
+
+
+#---------------------------
+# B. Calculate carbon growth
+#---------------------------
+### calculate rate of increase in carbon quotas during daylight (~ net carbon fixation)
+meta_gyre_d <- meta_gyre_d %>% mutate(daytime = case_when(par > 10 ~ 1, TRUE ~ 0), # find daytime based on PAR values
+  time_local = as.Date(date - 10 * 60 * 60)) %>%
+  group_by(cruise, pop, daytime, time_local) %>%
+  mutate(daily_growth = 60 * 60 * lm(qc ~ date)$coefficients[2] / mean(qc),
+         growth_stderror = as.numeric(60 * 60 * broom::tidy(lm(qc ~ date))[2,3]),
+         growth_pvalue = as.numeric(broom::tidy(lm(qc ~ date))[2,5]),
+         period = as.numeric(diff(range(date)))) # period (in hours) of daylight
+
+### curation of growth rate
+meta_gyre_d <- meta_gyre_d %>%
+  mutate(daily_growth = case_when( 
+  daytime == 0 ~ NaN, # remove `growth` during nighttime
+  growth_pvalue >= 0.01 ~ NaN, # NA's if p-value of grwoth rae is less than 0.01
+  period < 6 ~ NaN, # NA's if daylight is less than 6 hours apart
+  daily_growth < 0 ~ NaN, 
+  TRUE ~ daily_growth)) %>%
+  ungroup(time_local, daytime) %>%
+  select(!c(time_local, daytime, period, growth_pvalue))
+
+### plot daily growth estimates foreach cruise over time
+meta_gyre_d %>% ggplot(aes(distance, daily_growth, col = pop)) +
+  geom_pointrange(aes(ymin = daily_growth - growth_stderror, ymax = daily_growth + growth_stderror)) +
+  facet_wrap(. ~ cruise, scale = "free_x") +
+  theme_bw()
+
+#--------------------------
+# c. PLOTTING OVER DISTANCE
+#--------------------------
 ### Calculate mean and sd over binned distance from the edges of the NPSG
 res <- 100 # km (i.e data binned every 100 km)
 
 d <- range(meta_gyre_d$distance)
 data_figure <- meta_gyre_d %>%
-  filter(pop != "croco") %>%
-  group_by(cruise, pop, gyre,
+  group_by(cruise, pop, 
     distance = cut(distance, seq(d[1],d[2], by = res), 
       labels = seq(d[1],d[2], by = res)[-1])) %>%
   dplyr::summarise_all(list(mean = function(x) mean(x, na.rm = TRUE), 
     sd = function(x) sd(x, na.rm = TRUE))) %>%
-mutate(distance = as.numeric(as.character(distance)))
+mutate(distance = as.numeric(as.character(distance))) %>%
+ungroup(cruise)
 
 
 ### add East / South / North categories
@@ -297,12 +342,13 @@ data_figure <- data_figure %>%
     TRUE ~ "Southwest"))
 
 ###### FOR NOW: don't use SR1917 and TN271
-data_figure <- subset(data_figure, cruise != "SR1917" & cruise != "TN271")
-
+data_figure <- data_figure %>% filter(cruise != "SR1917" & cruise != "TN271")
 
 ### uncertainties in front location
 binning <- res # uncertainties due to binning
-front_uncertainties <- boundaries %>% group_by(cruise) %>%
+front_uncertainties <- boundaries %>% 
+filter(cruise != "SR1917" & cruise != "TN271") %>%
+group_by(cruise) %>%
   summarize_all(mean) %>%
   mutate(up = case_when(up < binning ~ binning, 
       TRUE ~ up),
@@ -331,8 +377,8 @@ fig1 <- data_figure %>%
     geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
     geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
     # geom_vline(xintercept = 0, lty = 2) +
-    scale_color_manual(values=pop_cols) +
-    facet_wrap(. ~ cruise, scale = "free") +
+    scale_color_manual(values = pop_cols) +
+    facet_wrap(. ~ cruise, scale = "free_x") +
     theme_bw() +
     labs(y = ylab, x = "distance (km)")
 
