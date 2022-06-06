@@ -336,9 +336,9 @@ ungroup(cruise)
 
 ### add East / South / North categories
 data_figure <- data_figure %>%
-  mutate(region = case_when(cruise == "SR1917" & lon_mean < 220 | cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3" | cruise == "KM1712" | cruise == "KM1713" ~ "Northwest",
-    cruise == "SR1917" & lon_mean > 220 | cruise == "KM1502" | cruise == "TN271" | cruise == "TN398" | cruise == "Gradients 4" & lat_mean > 22 ~ "Northeast",
-    cruise == "Gradients 4" & lat_mean < 22 | cruise == "KM1923" ~ "Southeast",
+  mutate(region = case_when(cruise == "SR1917" & lon < 220 | cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3" | cruise == "KM1712" | cruise == "KM1713" ~ "Northwest",
+    cruise == "SR1917" & lon > 220 | cruise == "KM1502" | cruise == "TN271" | cruise == "TN398" | cruise == "Gradients 4" & lat > 22 ~ "Northeast",
+    cruise == "Gradients 4" & lat < 22 | cruise == "KM1923" ~ "Southeast",
     TRUE ~ "Southwest"))
 
 ###### FOR NOW: don't use SR1917 and TN271
@@ -425,12 +425,12 @@ fig4 <- data_figure %>%
 if (para == "c_per_uL"){ # get rid of outliers for easier visualization
   data_figure <- subset(data_figure, c_per_uL_mean < 60)
 }
-fig5 <- data_figure %>%
+fig5 <- meta_gyre_d %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
-  rename(mean = contains("mean")) %>%
-  ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(aes(y = ..count../sum(..count..)), alpha = 0.4, bins = 20, position = "identity") +  
-  facet_grid(pop ~ region, scale = "fixed") +
+  rename(param = contains(para)) %>%
+  ggplot(aes(x = param, color = gyre, fill = gyre)) + 
+  geom_histogram(aes(y = ..count../sum(..count..)), alpha = 0.4, bins = 30, position = "identity") +  
+  facet_grid(region ~ pop, scale = "free_x") +
   scale_color_manual(values=gyre_cols) +
   scale_fill_manual(values=gyre_cols) +
   theme_bw() +
@@ -460,6 +460,25 @@ dev.off()
 
 
 ### plotting nutrients
+para1 <- #WORK IN PROGRES ############
+
+fig_nutr <- data_figure %>%
+  select(region, cruise, pop, distance, contains(para1), contains(para2)) %>%
+  rename(mean1 = contains("mean"), sd1 = contains("sd")) %>%
+  rename(mean2 = contains("mean"), sd2 = contains("sd")) %>%
+  ggplot(aes(distance, mean)) + 
+  geom_point() +
+  geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  theme_bw() +
+  facet_wrap(. ~ cruise, scale = "free") +
+  labs(y = ylab, x = "distance (km)")
+
+png(paste0("figures/",name,"-nutr-cruise.png"), width = 2500, height = 1200, res = 200)
+print(fig5)
+dev.off()
+
+# plotting individually
 
 para <- "NO3_NO2"; ylab <- "nitrate and nitrite concentration (μg / L)"; name <- "nitrate"
 para <- "PO4"; ylab <- "phosphate concentration (μg / L)"; name <- "phosphate"
