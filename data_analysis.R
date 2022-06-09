@@ -274,7 +274,8 @@ meta_gyre_d  <- meta_gyre_d %>%
                            TRUE ~ "outside"))
 
 ### plot gyre
-g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c("deeppink4","cyan4")) %>% layout(geo = geo)
+meta_gyre_d <- meta_gyre_d %>% filter(cruise != "SR1917" & cruise != "TN271")
+g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c(viridis(4)[1],viridis(4)[3])) %>% layout(geo = geo)
 #plotly_IMAGE(g, format = "png", out_file = "figures/cruise-track.png", width = 1000, height = 1000)
 
 
@@ -367,6 +368,8 @@ para <- "n_per_uL"; ylab <- "abundance (cells / μL)"; name <- "abundance"
 para <- "c_per_uL"; ylab <- "biomass (μgC / L)"; name <- "biomass"
 # or
 para <- "diam"; ylab <- "equivalent spherical diameter (μm)"; name <- "diameter"
+# or
+para <- "daily_growth"; ylab <- "daily growth rate"; name <- "growthrate"
 
 
 ### set colors
@@ -466,22 +469,24 @@ dev.off()
 
 
 ### plotting nutrients
-para1 <- #WORK IN PROGRES ############
+data_nutr <- data_figure[, c("region", "cruise", "pop", "distance", "NO3_NO2_mean", "PO4_mean")]
+data_nutr <- data_nutr %>%
+  rename(NO3_NO2 = NO3_NO2_mean, PO4 = PO4_mean) %>%
+  gather(nutrient, concentration, 5:6)
 
-fig_nutr <- data_figure %>%
-  select(region, cruise, pop, distance, contains(para1), contains(para2)) %>%
-  rename(mean1 = contains("mean"), sd1 = contains("sd")) %>%
-  rename(mean2 = contains("mean"), sd2 = contains("sd")) %>%
-  ggplot(aes(distance, mean)) + 
+fig_nutr <- data_nutr %>%
+  ggplot(aes(distance, concentration, col = nutrient)) + 
   geom_point() +
-  geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
+  #geom_line(aes(group = nutrient), lwd = 1) +
+  #geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
+  scale_color_manual(values=c(viridis(4)[1], viridis(4)[3])) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
   theme_bw() +
   facet_wrap(. ~ cruise, scale = "free") +
-  labs(y = ylab, x = "distance (km)")
+  labs(y = "nutrient concentration (μg / L)", x = "distance (km)")
 
 png(paste0("figures/",name,"-nutr-cruise.png"), width = 2500, height = 1200, res = 200)
-print(fig5)
+print(fig_nutr)
 dev.off()
 
 # plotting individually
@@ -529,17 +534,19 @@ dev.off()
 ### plotting nutrients against phytoplankton diameter
 
 ### take mean diameter per day
-data_figure$day <- substr(data_figure$date_mean, 1, 10)
-diam_data <- data_figure %>%
+meta_gyre_d$day <- substr(meta_gyre_d$date, 1, 10)
+diam_data <- meta_gyre_d %>%
   group_by(cruise, pop, day, gyre) %>%
-  dplyr::summarise_at(c("diam_mean", "c_per_uL_mean", "SiO4_mean", "NO3_NO2_mean", "PO4_mean"), list(mean), na.rm=T)
+  dplyr::summarise_at(c("diam", "c_per_uL", "daily_growth", "SiO4", "NO3_NO2", "PO4"), list(mean), na.rm=T)
+
 
 fig8 <- diam_data %>%
-  select(cruise, pop, gyre, diam_mean, contains(para)) %>%
-  rename(mean = contains(paste0(para, "_", "mean")), sd = contains("sd")) %>%
-  ggplot(aes(mean, diam_mean, col = gyre)) + 
+  select(cruise, pop, gyre, diam, contains(para)) %>%
+  rename(mean = contains(para)) %>%
+  ggplot(aes(mean, diam, col = gyre)) + 
   geom_point() +
   theme_bw() +
+  geom_smooth(method = "lm", formula = y~x) +
   scale_color_manual(values=gyre_cols) +
   facet_wrap(pop ~ ., scale = "free") +
   labs(x = ylab, y = "daily diameter (μm)")
@@ -548,14 +555,28 @@ fig8 <- diam_data %>%
 ### plotting nutrients against phytoplankton biomass
 
 fig9 <- diam_data %>%
-  select(cruise, pop, gyre, c_per_uL_mean, contains(para)) %>%
-  rename(mean = contains(paste0(para, "_", "mean")), sd = contains("sd")) %>%
-  ggplot(aes(mean, c_per_uL_mean, col = gyre)) + 
+  select(cruise, pop, gyre, c_per_uL, contains(para)) %>%
+  rename(mean = contains(para)) %>%
+  ggplot(aes(mean, c_per_uL, col = gyre)) + 
   geom_point() +
   theme_bw() +
+  geom_smooth(method = "lm", formula = y~x) +
   scale_color_manual(values=gyre_cols) +
   facet_wrap(pop ~ ., scale = "free") +
   labs(x = ylab, y = "biomass (μgC / L)")
+
+### plotting nutrients against growth rate
+
+fig10 <- diam_data %>%
+  select(cruise, pop, gyre, daily_growth, contains(para)) %>%
+  rename(mean = contains(para)) %>%
+  ggplot(aes(mean, daily_growth, col = gyre)) + 
+  geom_point() +
+  theme_bw() +
+  geom_smooth(method = "lm", formula = y~x) +
+  scale_color_manual(values=gyre_cols) +
+  facet_wrap(pop ~ ., scale = "free") +
+  labs(x = ylab, y = "daily growth rate")
 
 
 ### save plots
@@ -566,4 +587,8 @@ dev.off()
 
 png(paste0("figures/",name,"-biomass.png"), width = 2500, height = 1200, res = 200)
 print(fig9)
+dev.off()
+
+png(paste0("figures/",name,"-growthrate.png"), width = 2500, height = 1200, res = 200)
+print(fig10)
 dev.off()
