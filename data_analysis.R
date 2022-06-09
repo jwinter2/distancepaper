@@ -180,41 +180,44 @@ tz <- meta_distance_binned %>%
 
  
 ### plot locations of all abrupt changes of salinity
-# meta_distance_binned %>%  ggplot() + 
-#   geom_point(aes(distance, salinity)) + 
-#   geom_point(aes(distance, smooth_salinity), col = 2) + 
-#   geom_point(aes(distance, smooth_salinity_down), col = 3) + 
-#   geom_point(aes(distance, smooth_salinity_up), col = 4) + 
-#   geom_hline(data = tz, aes( yintercept = sal_front), col = 2) + 
-#   geom_hline(data = tz, aes( yintercept = sal_front_down), col = 3) + 
-#   geom_hline(data = tz, aes( yintercept = sal_front_up), col = 4) + 
+# meta_distance_binned %>%  ggplot() +
+#   geom_point(aes(distance, salinity)) +
+#   geom_point(aes(distance, smooth_salinity), col = 2) +
+#   geom_point(aes(distance, smooth_salinity_down), col = 3) +
+#   geom_point(aes(distance, smooth_salinity_up), col = 4) +
+#   geom_hline(data = tz, aes( yintercept = sal_front), col = 2) +
+#   geom_hline(data = tz, aes( yintercept = sal_front_down), col = 3) +
+#   geom_hline(data = tz, aes( yintercept = sal_front_up), col = 4) +
 #   facet_wrap(. ~ cruise, scale = "free_x")
 
 
 ### Identify locations inside or outside the gyre (0 = gyre; 1 = outside gyre)
-# Note: using the unbinned data this time
+# Note: using the raw data (meta) this time, not the binned data over distance
 meta_gyre <- left_join(meta, tz) %>%
   group_by(cruise) %>%
   mutate(raw_gyre = case_when(salinity > sal_front ~ 0, 
       TRUE ~ 1),
-    gyre = case_when(lon > 190 & lat < 24 & raw_gyre == 1 ~ 0,
+    gyre = case_when(
+      lon > 190 & lat < 24 & lat > 7 & raw_gyre == 1 ~ 0,
       lon > 190 & lat < 11 & raw_gyre == 0 ~ 1,
-      lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0,
-      lon < 190 & raw_gyre == 1 ~ 0,
+      lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0, # correction around Hawaii
+      lon < 194 & raw_gyre == 1 ~ 0, # correction in western Pacific
       TRUE ~ raw_gyre)) %>%
   mutate(raw_gyre_down = case_when(salinity > sal_front_down ~ 0, 
       TRUE ~ 1),
-    gyre_down = case_when(lon > 190 & lat < 24 & raw_gyre_down == 1 ~ 0,
+    gyre_down = case_when(
+      lon > 190 & lat < 24 & lat > 7& raw_gyre_down == 1 ~ 0,
       lon > 190 & lat < 11 & raw_gyre_down == 0 ~ 1,
       lon < 220 & lat < 33 & lat > 21 & raw_gyre_down == 1 ~ 0,
-      lon < 190 & raw_gyre_down == 1 ~ 0,
+      lon < 194 & raw_gyre_down == 1 ~ 0,
       TRUE ~ raw_gyre_down)) %>%
   mutate(raw_gyre_up = case_when(salinity > sal_front_up ~ 0, 
       TRUE ~ 1),
-    gyre_up = case_when(lon > 190 & lat < 24 & raw_gyre_up == 1 ~ 0,
+    gyre_up = case_when(
+      lon > 190 & lat < 24 & lat > 7 & raw_gyre_up == 1 ~ 0,
       lon > 190 & lat < 11 & raw_gyre_up == 0 ~ 1,
       lon < 220 & lat < 33 & lat > 21 & raw_gyre_up == 1 ~ 0,
-      lon < 190 & raw_gyre_up == 1 ~ 0,
+      lon < 194 & raw_gyre_up == 1 ~ 0,
       TRUE ~ raw_gyre_up)) %>%
   select(!c(raw_gyre, raw_gyre_up, raw_gyre_down, # remove unnecessary columns
     sal_front, sal_front_up, sal_front_down))
@@ -316,6 +319,9 @@ meta_gyre_d %>% ggplot(aes(distance, daily_growth, col = pop)) +
   geom_pointrange(aes(ymin = daily_growth - growth_stderror, ymax = daily_growth + growth_stderror)) +
   facet_wrap(. ~ cruise, scale = "free_x") +
   theme_bw()
+
+
+
 
 #--------------------------
 # c. PLOTTING OVER DISTANCE
