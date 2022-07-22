@@ -192,59 +192,59 @@ tz <- meta_distance_binned %>%
 
 
 ### Identify locations inside or outside the gyre (0 = gyre; 1 = outside gyre)
-# Note: using the raw data (meta) this time, not the binned data over distance
+# Note: using the unbinned data this time
 meta_gyre <- left_join(meta, tz) %>%
   group_by(cruise) %>%
   mutate(raw_gyre = case_when(salinity > sal_front ~ 0, 
       TRUE ~ 1),
-    gyre = case_when(
-      lon > 190 & lat < 24 & lat > 7 & raw_gyre == 1 ~ 0,
+    gyre = case_when(lon > 190 & lat < 24 & raw_gyre == 1 ~ 0,
       lon > 190 & lat < 11 & raw_gyre == 0 ~ 1,
-      lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0, # correction around Hawaii
-      lon < 194 & raw_gyre == 1 ~ 0, # correction in western Pacific
+      lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0,
+      lon < 190 & raw_gyre == 1 ~ 0,
       TRUE ~ raw_gyre)) %>%
   mutate(raw_gyre_down = case_when(salinity > sal_front_down ~ 0, 
       TRUE ~ 1),
-    gyre_down = case_when(
-      lon > 190 & lat < 24 & lat > 7& raw_gyre_down == 1 ~ 0,
+    gyre_down = case_when(lon > 190 & lat < 24 & raw_gyre_down == 1 ~ 0,
       lon > 190 & lat < 11 & raw_gyre_down == 0 ~ 1,
       lon < 220 & lat < 33 & lat > 21 & raw_gyre_down == 1 ~ 0,
-      lon < 194 & raw_gyre_down == 1 ~ 0,
+      lon < 190 & raw_gyre_down == 1 ~ 0,
       TRUE ~ raw_gyre_down)) %>%
   mutate(raw_gyre_up = case_when(salinity > sal_front_up ~ 0, 
       TRUE ~ 1),
-    gyre_up = case_when(
-      lon > 190 & lat < 24 & lat > 7 & raw_gyre_up == 1 ~ 0,
+    gyre_up = case_when(lon > 190 & lat < 24 & raw_gyre_up == 1 ~ 0,
       lon > 190 & lat < 11 & raw_gyre_up == 0 ~ 1,
       lon < 220 & lat < 33 & lat > 21 & raw_gyre_up == 1 ~ 0,
-      lon < 194 & raw_gyre_up == 1 ~ 0,
+      lon < 190 & raw_gyre_up == 1 ~ 0,
       TRUE ~ raw_gyre_up)) %>%
   select(!c(raw_gyre, raw_gyre_up, raw_gyre_down, # remove unnecessary columns
     sal_front, sal_front_up, sal_front_down))
 
 
+
 ### calculate distance (km) from boundaries of the NPSG for each cruise
 # location of boundaries
-id <- which(diff(meta_gyre$gyre) != 0)
+# the date is to make sure this is not finding a difference between different cruises
+id <- which(diff(meta_gyre$gyre) != 0 & diff(meta_gyre$date) < 10800)
 boundaries <- meta_gyre[id,] %>% 
   group_by(date) %>% 
   summarize(lat = mean(lat), 
     lon = mean(lon),
     cruise = unique(cruise))
 
-id_down <- which(diff(meta_gyre$gyre_down) != 0)
+id_down <- which(diff(meta_gyre$gyre_down) != 0 & diff(meta_gyre$date) < 10800)
 boundaries_down <- meta_gyre[id_down,] %>% 
   group_by(date) %>% 
   summarize(lat = mean(lat), 
     lon = mean(lon),
     cruise = unique(cruise))
 
-id_up <- which(diff(meta_gyre$gyre_up) != 0)
+id_up <- which(diff(meta_gyre$gyre_up) != 0 & diff(meta_gyre$date) < 10800)
 boundaries_up <- meta_gyre[id_up,] %>% 
   group_by(date) %>% 
   summarize(lat = mean(lat), 
     lon = mean(lon),
     cruise = unique(cruise))
+
 
 ### calculate distance from the front
 sf_tz <- sf::st_as_sf(boundaries, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
@@ -255,7 +255,7 @@ for(c in unique(sf_meta$cruise)) {
   sf_tz_g <- sf_tz %>% filter(cruise == c)
   sf_meta_g <- sf_meta %>% filter(cruise == c)
   meta_g <- meta_gyre %>% filter(cruise == c) %>%
-    mutate(distance = apply(sf::st_distance(sf_meta_g, sf_tz), 1, function(x) min(x) / 1000)) %>%
+    mutate(distance = apply(sf::st_distance(sf_meta_g, sf_tz_g), 1, function(x) min(x) / 1000)) %>%
     select(!c(gyre_down, gyre_up))
   meta_gyre_d <- bind_rows(meta_gyre_d, meta_g)
 }
@@ -278,13 +278,9 @@ meta_gyre_d <- meta_gyre_d %>% filter(cruise != "SR1917" & cruise != "TN271")
 g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c(viridis(4)[1],viridis(4)[3])) %>% layout(geo = geo)
 #plotly_IMAGE(g, format = "png", out_file = "figures/cruise-track.png", width = 1000, height = 1000)
 
-
-
-
-
-
-
-
+# plot cruise tracks
+g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ cruise, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>% layout(geo = geo)
+#g
 
 
 
@@ -321,9 +317,6 @@ meta_gyre_d %>% ggplot(aes(distance, daily_growth, col = pop)) +
   facet_wrap(. ~ cruise, scale = "free_x") +
   theme_bw()
 
-
-
-
 #--------------------------
 # c. PLOTTING OVER DISTANCE
 #--------------------------
@@ -343,10 +336,15 @@ ungroup(cruise)
 
 ### add East / South / North categories
 data_figure <- data_figure %>%
-  mutate(region = case_when(cruise == "SR1917" & lon < 220 | cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3" | cruise == "KM1712" | cruise == "KM1713" ~ "Northwest",
-    cruise == "SR1917" & lon > 220 | cruise == "KM1502" | cruise == "TN271" | cruise == "TN398" | cruise == "Gradients 4" & lat > 22 ~ "Northeast",
-    cruise == "Gradients 4" & lat < 22 | cruise == "KM1923" ~ "Southeast",
+  mutate(region = case_when(cruise == "SR1917" & lon_mean < 220 | cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3" | cruise == "KM1712" | cruise == "KM1713" ~ "Northwest",
+    cruise == "SR1917" & lon_mean > 220 | cruise == "KM1502" | cruise == "TN271" | cruise == "TN398" | cruise == "Gradients 4" & lat_mean > 22 ~ "Northeast",
+    cruise == "Gradients 4" & lat_mean < 22 | cruise == "KM1923" ~ "Southeast",
     TRUE ~ "Southwest"))
+meta_gyre_d <- meta_gyre_d %>%
+  mutate(region = case_when(cruise == "SR1917" & lon < 220 | cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3" | cruise == "KM1712" | cruise == "KM1713" ~ "Northwest",
+                            cruise == "SR1917" & lon > 220 | cruise == "KM1502" | cruise == "TN271" | cruise == "TN398" | cruise == "Gradients 4" & lat > 22 ~ "Northeast",
+                            cruise == "Gradients 4" & lat < 22 | cruise == "KM1923" ~ "Southeast",
+                            TRUE ~ "Southwest"))
 
 ###### FOR NOW: don't use SR1917 and TN271
 data_figure <- data_figure %>% filter(cruise != "SR1917" & cruise != "TN271")
@@ -361,6 +359,19 @@ group_by(cruise) %>%
       TRUE ~ up),
     down = case_when(down < binning ~ - binning, 
     TRUE ~ - down))
+
+for (cruise_name in unique(front_uncertainties$cruise)){
+  small_unc <- subset(front_uncertainties, cruise == cruise_name)
+  up <- which(meta_gyre_d$cruise == cruise_name & meta_gyre_d$distance <= small_unc$up
+              & meta_gyre_d$distance >= 0)
+  meta_gyre_d$gyre[up] <- "transition"
+  down <- which(meta_gyre_d$cruise == cruise_name & meta_gyre_d$distance >= small_unc$down
+              & meta_gyre_d$distance <= 0)
+  meta_gyre_d$gyre[down] <- "transition"
+}
+
+g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>% layout(geo = geo)
+g
 
 ### choose a parameter
 para <- "n_per_uL"; ylab <- "abundance (cells / μL)"; name <- "abundance"
@@ -378,7 +389,7 @@ gyre_cols <- c("inside" = viridis(5)[1], "outside" = viridis(5)[4])
 
 
 ### plotting parameter over distance per cruise
-fig1 <- data_figure %>%
+fig1 <- data_figure_pro %>%
  select(region, cruise, pop, distance, contains(para)) %>%
  rename(mean = contains("mean"), sd = contains("sd")) %>%
   ggplot(aes(distance, mean,  col = pop)) + 
@@ -388,7 +399,7 @@ fig1 <- data_figure %>%
     # geom_vline(xintercept = 0, lty = 2) +
     scale_color_manual(values = pop_cols) +
     facet_wrap(. ~ cruise, scale = "free_x") +
-    theme_bw() +
+    theme_bw(base_size = 20) +
     labs(y = ylab, x = "distance (km)")
 
 ### plotting parameter over distance per region
@@ -431,10 +442,23 @@ fig4 <- data_figure %>%
   labs(x = ylab)
 
 ### plotting histogram of parameter inside vs outside the gyre per region
-if (para == "c_per_uL"){ # get rid of outliers for easier visualization
-  data_figure <- subset(data_figure, c_per_uL_mean < 60)
+data_fig5 <- meta_gyre_d
+gyre_in <- which(data_fig5$gyre == "transition" & data_fig5$distance <= 0)
+data_fig5$gyre[gyre_in] <- "inside"
+gyre_out <- which(data_fig5$gyre == "transition" & data_fig5$distance > 0)
+data_fig5$gyre[gyre_out] <- "outside"
+
+if (para == "diam" | para == "c_per_uL"){ # make sure diameter can be estimated
+pointotwo <- which(data_fig5$n_per_uL < 0.02 & data_fig5$pop != "prochloro")
+data_fig5 <- data_fig5[-pointotwo,]
+twentyfive <- which(data_fig5$n_per_uL < 25 & data_fig5$pop == "prochloro")
+data_fig5 <- data_fig5[-twentyfive,]
 }
-fig5 <- meta_gyre_d %>%
+
+if (para == "c_per_uL"){ # get rid of outliers for easier visualization
+  data_fig5 <- subset(data_fig5, c_per_uL < 60)
+}
+fig5 <- data_fig5 %>%
   select(region, cruise, pop, gyre, contains(para)) %>%
   rename(param = contains(para)) %>%
   ggplot(aes(x = param, color = gyre, fill = gyre)) + 
@@ -442,8 +466,8 @@ fig5 <- meta_gyre_d %>%
   facet_grid(region ~ pop, scale = "free_x") +
   scale_color_manual(values=gyre_cols) +
   scale_fill_manual(values=gyre_cols) +
-  theme_bw() +
-  labs(x = ylab)
+  theme_bw(base_size = 20) +
+  labs(x = ylab, y = "proportion")
 
 
 ### save plot
@@ -473,19 +497,23 @@ data_nutr <- data_figure[, c("region", "cruise", "pop", "distance", "NO3_NO2_mea
 data_nutr <- data_nutr %>%
   rename(NO3_NO2 = NO3_NO2_mean, PO4 = PO4_mean) %>%
   gather(nutrient, concentration, 5:6)
+data_nutr$modeled <- "modeled"
+actual <- which(data_nutr$cruise == "Gradients 1" | data_nutr$cruise == "Gradients 2" | data_nutr$cruise == "Gradients 3" | data_nutr$cruise == "TN398")
+data_nutr$modeled[actual] <- "observed"
+
 
 fig_nutr <- data_nutr %>%
-  ggplot(aes(distance, concentration, col = nutrient)) + 
-  geom_point() +
+  ggplot(aes(distance, concentration, col = nutrient, shape = modeled)) + 
+  geom_point(size = 2) +
   #geom_line(aes(group = nutrient), lwd = 1) +
   #geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
   scale_color_manual(values=c(viridis(4)[1], viridis(4)[3])) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  theme_bw() +
+  theme_bw(base_size = 15) +
   facet_wrap(. ~ cruise, scale = "free") +
   labs(y = "nutrient concentration (μg / L)", x = "distance (km)")
 
-png(paste0("figures/",name,"-nutr-cruise.png"), width = 2500, height = 1200, res = 200)
+png(paste0("figures/", "nutr-cruise.png"), width = 2500, height = 1200, res = 200)
 print(fig_nutr)
 dev.off()
 
