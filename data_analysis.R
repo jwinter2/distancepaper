@@ -317,6 +317,8 @@ meta_gyre_d %>% ggplot(aes(distance, daily_growth, col = pop)) +
   facet_wrap(. ~ cruise, scale = "free_x") +
   theme_bw()
 
+
+
 #--------------------------
 # c. PLOTTING OVER DISTANCE
 #--------------------------
