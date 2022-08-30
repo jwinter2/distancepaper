@@ -2,6 +2,9 @@ library(tidyverse)
 library(arrow)
 library(geosphere)
 library(sf)
+library(plotly)
+library(viridis)
+library(dplyr)
 
 # Francois
 setwd("~/Documents/Codes/distancepaper") # path to github repository
@@ -49,7 +52,7 @@ geo <- list(
 #-------------------
 # Environmental data
 #-------------------
-env <- read_csv("data/env_fixed.csv") %>% arrange(date)
+env <- read_csv("data/EnvironmentalData.csv") %>% arrange(date)
 
 ### Clean-up data
 # salinity and Temperature (due to freshwater contamination in ships' seawater supply)
@@ -93,10 +96,18 @@ meta <- full_join(seaflow %>% select(!cruise), env %>% select(!c(lat, lon)), by 
         mutate(lat = zoo::na.approx(lat, na.rm = FALSE),
               lon = zoo::na.approx(lon, na.rm = FALSE))
 
+# change Gradients cruise names to their actual cruise names
+id_grad1 <- which(meta$cruise == "Gradients 1")
+meta$cruise[id_grad1] <- "KOK1606"
+id_grad2 <- which(meta$cruise == "Gradients 2")
+meta$cruise[id_grad2] <- "MGL1704"
+id_grad3 <- which(meta$cruise == "Gradients 3")
+meta$cruise[id_grad3] <- "KM1906"
+id_grad4 <- which(meta$cruise == "Gradients 4")
+meta$cruise[id_grad4] <- "TN397"
 
 ### plot cruise track
 # plot_geo(meta, lat = ~ lat, lon = ~ lon, color = ~ cruise, mode = "scatter") %>%  layout(geo = geo)
-
 
 
 #--------------------------------------
@@ -274,78 +285,14 @@ meta_gyre_d  <- meta_gyre_d %>%
           gyre = case_when(gyre == 0 ~ "inside",
                            TRUE ~ "outside"))
 
-### plot gyre
-meta_gyre_d <- meta_gyre_d %>% filter(cruise != "SR1917" & cruise != "TN271")
-g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = c(viridis(4)[1],viridis(4)[3])) %>% layout(geo = geo)
-#plotly_IMAGE(g, format = "png", out_file = "figures/cruise-track.png", width = 1000, height = 1000)
-
 # plot cruise tracks
 g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ cruise, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>%
   layout(geo = geo)
 #g
 
-#plots on flat map projection
-for_map <- meta_gyre_d
-for_map$lon <- for_map$lon - 360
-worldmap <- map_data("world")
-worldmap <- subset(worldmap, long > -170 & long < -110)
-worldmap <- subset(worldmap, lat > -10 & lat < 70)
-
-#choose a parameter
-type <- "cruise"
-type <- "gyre"
-type <- "salinity"
-
-png(paste0(type, "_map.png"),width=12, height=10, unit="in", res=200)
-g <- ggplot() +
-geom_map(data = worldmap, map = worldmap, aes(long, lat, map_id = region), color = "white", fill = "lightgray") +
-geom_point(data = for_map, aes(lon, lat, color = salinity), size=2, alpha = 0.7, show.legend = T) +
-theme_bw() +
-scale_color_viridis() +
-#scale_color_manual(values = viridis(3)) +
-theme(text = element_text(size = 20))
-print(g)
-dev.off()
-
-
-
-
-
-
-
-#---------------------------
-# B. Calculate carbon growth
-#---------------------------
-### calculate rate of increase in carbon quotas during daylight (~ net carbon fixation)
-meta_gyre_d <- meta_gyre_d %>% mutate(daytime = case_when(par > 10 ~ 1, TRUE ~ 0), # find daytime based on PAR values
-  time_local = as.Date(date - 10 * 60 * 60)) %>%
-  group_by(cruise, pop, daytime, time_local) %>%
-  mutate(daily_growth = 60 * 60 * lm(qc ~ date)$coefficients[2] / mean(qc),
-         growth_stderror = as.numeric(60 * 60 * broom::tidy(lm(qc ~ date))[2,3]),
-         growth_pvalue = as.numeric(broom::tidy(lm(qc ~ date))[2,5]),
-         period = as.numeric(diff(range(date)))) # period (in hours) of daylight
-
-### curation of growth rate
-meta_gyre_d <- meta_gyre_d %>%
-  mutate(daily_growth = case_when( 
-  daytime == 0 ~ NaN, # remove `growth` during nighttime
-  growth_pvalue >= 0.01 ~ NaN, # NA's if p-value of grwoth rae is less than 0.01
-  period < 6 ~ NaN, # NA's if daylight is less than 6 hours apart
-  daily_growth < 0 ~ NaN, 
-  TRUE ~ daily_growth)) %>%
-  ungroup(time_local, daytime) %>%
-  select(!c(time_local, daytime, period, growth_pvalue))
-
-### plot daily growth estimates foreach cruise over time
-meta_gyre_d %>% ggplot(aes(distance, daily_growth, col = pop)) +
-  geom_pointrange(aes(ymin = daily_growth - growth_stderror, ymax = daily_growth + growth_stderror)) +
-  facet_wrap(. ~ cruise, scale = "free_x") +
-  theme_bw()
-
-
 
 #--------------------------
-# c. PLOTTING OVER DISTANCE
+# b. PLOTTING OVER DISTANCE
 #--------------------------
 ### Calculate mean and sd over binned distance from the edges of the NPSG
 res <- 100 # km (i.e data binned every 100 km)
@@ -360,26 +307,9 @@ data_figure <- meta_gyre_d %>%
 mutate(distance = as.numeric(as.character(distance))) %>%
 ungroup(cruise)
 
-
-### add East / South / North categories
-data_figure <- data_figure %>%
-  mutate(region = case_when(cruise == "SR1917" & lon_mean < 220 | cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3" | cruise == "KM1712" | cruise == "KM1713" ~ "Northwest",
-    cruise == "SR1917" & lon_mean > 220 | cruise == "KM1502" | cruise == "TN271" | cruise == "TN398" | cruise == "Gradients 4" & lat_mean > 22 ~ "Northeast",
-    cruise == "Gradients 4" & lat_mean < 22 | cruise == "KM1923" ~ "Southeast",
-    TRUE ~ "Southwest"))
-meta_gyre_d <- meta_gyre_d %>%
-  mutate(region = case_when(cruise == "SR1917" & lon < 220 | cruise == "Gradients 1" | cruise == "Gradients 2" | cruise == "Gradients 3" | cruise == "KM1712" | cruise == "KM1713" ~ "Northwest",
-                            cruise == "SR1917" & lon > 220 | cruise == "KM1502" | cruise == "TN271" | cruise == "TN398" | cruise == "Gradients 4" & lat > 22 ~ "Northeast",
-                            cruise == "Gradients 4" & lat < 22 | cruise == "KM1923" ~ "Southeast",
-                            TRUE ~ "Southwest"))
-
-### add seasonal categories
-library(hydroTSM)
-meta_gyre_d$season <- time2season(meta_gyre_d$date, out.fmt = "seasons")
-
-
-###### FOR NOW: don't use SR1917 and TN271
-data_figure <- data_figure %>% filter(cruise != "SR1917" & cruise != "TN271")
+### remove subpolar data
+subpolar_id <- which(data_figure$cruise == "KM1712" & data_figure$distance > 2500)
+data_figure <- data_figure[-subpolar_id,]
 
 ### uncertainties in front location
 binning <- res # uncertainties due to binning
@@ -393,7 +323,7 @@ group_by(cruise) %>%
     TRUE ~ - down))
 
 for (cruise_name in unique(front_uncertainties$cruise)){
-  small_unc <- small_unc %>% filter(cruise == cruise_name)
+  small_unc <- front_uncertainties %>% filter(cruise == cruise_name)
   up <- which(meta_gyre_d$cruise == cruise_name & meta_gyre_d$distance <= small_unc$up
               & meta_gyre_d$distance >= 0)
   meta_gyre_d$gyre[up] <- "transition"
@@ -402,8 +332,58 @@ for (cruise_name in unique(front_uncertainties$cruise)){
   meta_gyre_d$gyre[down] <- "transition"
 }
 
-g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>% layout(geo = list(projection = list(type = "mercator")))
-g
+#plots on flat map projection
+for_map <- meta_gyre_d
+for_map$lon <- for_map$lon - 360
+worldmap <- map_data("world")
+worldmap <- subset(worldmap, long > -170 & long < -110)
+worldmap <- subset(worldmap, lat > -10 & lat < 70)
+
+#choose a parameter
+type <- "cruise"
+type <- "gyre"
+type <- "salinity"
+
+png(paste0("figures/", type, "_map.png"),width=12, height=10, unit="in", res=200)
+g <- ggplot() +
+  geom_map(data = worldmap, map = worldmap, aes(long, lat, map_id = region), color = "white", fill = "lightgray") +
+  geom_point(data = for_map, aes(lon, lat, color = gyre), size=2, alpha = 0.7, show.legend = T) +
+  theme_bw() +
+  #scale_color_viridis() +
+  scale_color_manual(values = viridis(3)) +
+  theme(text = element_text(size = 20))
+print(g)
+dev.off()
+
+
+### plotting nutrients
+data_nutr <- data_figure[, c("cruise", "pop", "distance", "NO3_NO2_mean", "PO4_mean")]
+data_nutr <- data_nutr %>%
+  dplyr::rename(NO3_NO2 = NO3_NO2_mean, PO4 = PO4_mean) %>%
+  gather(nutrient, concentration, 4:5)
+data_nutr$modeled <- "modeled"
+actual <- which(data_nutr$cruise == "KOK1606" | data_nutr$cruise == "MGL1704" | data_nutr$cruise == "KM1906" | data_nutr$cruise == "TN398")
+data_nutr$modeled[actual] <- "observed"
+ind_nutr <- which(data_nutr$cruise == "KM1923" & data_nutr$distance > 1750)
+data_nutr <- data_nutr[-ind_nutr,]
+
+nutrient_names <- list("NO3_NO2" = "nitrate", "PO4" = "phosphate")
+nutrient_labeller <- function(variable, value){
+  return(nutrient_names[value])
+}
+
+
+fig_nutr <- data_nutr %>%
+  ggplot(aes(distance, concentration, col = cruise, shape = modeled)) + 
+  geom_point(size = 2) +
+  scale_color_manual(values=viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) +
+  theme_bw(base_size = 15) +
+  facet_wrap(. ~ nutrient, scale = "free", labeller=nutrient_labeller) +
+  labs(y = "nutrient concentration (μg / L)", x = "distance (km)")
+
+png(paste0("figures/", "nutr-cruise.png"), width = 2500, height = 1200, res = 200)
+print(fig_nutr)
+dev.off()
 
 ### choose a parameter
 para <- "n_per_uL"; ylab <- "abundance (cells / μL)"; name <- "abundance"
@@ -411,187 +391,35 @@ para <- "n_per_uL"; ylab <- "abundance (cells / μL)"; name <- "abundance"
 para <- "c_per_uL"; ylab <- "biomass (μgC / L)"; name <- "biomass"
 # or
 para <- "diam"; ylab <- "equivalent spherical diameter (μm)"; name <- "diameter"
-# or
-para <- "daily_growth"; ylab <- "daily growth rate"; name <- "growthrate"
 
 
 ### set colors
-pop_cols <- c("prochloro" = viridis(3)[1], "picoeuk" = viridis(3)[2], "synecho" = viridis(3)[3])
+pop_cols <- c("prochloro" = viridis(3)[1], "synecho" = viridis(3)[3], "picoeuk" = viridis(3)[2])
 gyre_cols <- c("inside" = viridis(5)[1], "outside" = viridis(5)[4])
 
+### pop as factors
+data_figure$pop <- as.factor(data_figure$pop)
+levels(data_figure$pop) <- c("prochloro", "synecho", "picoeuk", "croco", "beads", "unknown")
 
 ### plotting parameter over distance per cruise
-fig1 <- data_figure %>%
- select(region, cruise, pop, distance, contains(para)) %>%
+fig3 <- data_figure %>%
+ select(cruise, pop, distance, contains(para)) %>%
  rename(mean = contains("mean"), sd = contains("sd")) %>%
-  ggplot(aes(distance, mean,  col = pop)) + 
-    geom_line(aes(group = pop), lwd = 1) +  
-    geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
+  ggplot(aes(distance, mean,  col = pop, fill = pop)) + 
+    geom_line(aes(group = pop), lwd = 1, position = "stack") + 
+    geom_area(position = "stack", stat = "identity", alpha = 0.5) +
+    #geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
     geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-    # geom_vline(xintercept = 0, lty = 2) +
-    scale_color_manual(values = pop_cols) +
+    scale_fill_manual(values = pop_cols, name = "population") +
+    scale_color_manual(values = pop_cols, guide = "none") +
     facet_wrap(. ~ cruise, scale = "free_x") +
     theme_bw(base_size = 20) +
     labs(y = ylab, x = "distance (km)")
 
-### plotting parameter over distance per region
-fig2 <- data_figure %>%
- select(region, cruise, pop, distance, contains(para)) %>%
- rename(mean = contains("mean"), sd = contains("sd")) %>%
-  ggplot(aes(distance, mean,  col = pop)) + 
-    geom_line(aes(group = cruise), lwd = 1) +  
-    geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
-    geom_vline(xintercept = 0, lty = 2) +
-    #scale_y_continuous(trans='log10') +
-    scale_color_manual(values=pop_cols) +
-    facet_grid(pop ~ region, scale = "free") +
-    theme_bw() +
-    labs(y = ylab, x = "distance (km)")
-
-### plotting histogram of parameter inside vs outside the gyre
-fig3 <- data_figure %>%
-  select(region, cruise, pop, gyre, contains(para)) %>%
-  rename(mean = contains("mean")) %>%
-  ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(aes(y = ..count../sum(..count..)), alpha = 0.4, bins=20, position = "identity") +
-  facet_grid(pop ~ ., scale = "fixed") +
-  scale_color_manual(values=gyre_cols) +
-  scale_fill_manual(values=gyre_cols) +
-  theme_bw() +
-  #scale_x_continuous(trans='log10') +
-  labs(x = ylab)
-
-### plotting histogram of parameter inside vs outside the gyre per cruise
-fig4 <- data_figure %>%
-  select(region, cruise, pop, gyre, contains(para)) %>%
-  rename(mean = contains("mean")) %>%
-  ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_histogram(aes(y = ..count../sum(..count..)), alpha = 0.4, bins=20, position = "identity") +  
-  facet_grid(pop ~ cruise, scale = "fixed") +
-  scale_color_manual(values=gyre_cols) +
-  scale_fill_manual(values=gyre_cols) +
-  theme_bw() +
-  labs(x = ylab)
-
-### plotting histogram of parameter inside vs outside the gyre per region
-data_fig5 <- meta_gyre_d
-gyre_in <- which(data_fig5$gyre == "transition" & data_fig5$distance <= 0)
-data_fig5$gyre[gyre_in] <- "inside"
-gyre_out <- which(data_fig5$gyre == "transition" & data_fig5$distance > 0)
-data_fig5$gyre[gyre_out] <- "outside"
-
-if (para == "diam" | para == "c_per_uL"){ # make sure diameter can be estimated
-pointotwo <- which(data_fig5$n_per_uL < 0.02 & data_fig5$pop == "picoeuk")
-if (length(pointotwo) > 0) {data_fig5 <- data_fig5[-pointotwo,]}
-pointtwo <- which(data_fig5$n_per_uL < 0.02 & data_fig5$pop == "synecho")
-if (length(pointtwo) > 0) {data_fig5 <- data_fig5[-pointtwo,]}
-twentyfive <- which(data_fig5$n_per_uL < 25 & data_fig5$pop == "prochloro")
-if (length(twentyfive) > 0) {data_fig5 <- data_fig5[-twentyfive,]}
-}
-
-if (para == "c_per_uL"){ # get rid of outliers for easier visualization
-  data_fig5 <- data_fig5 %>% filter(c_per_uL < 60)
-}
-
-# can make this figure for region or season, just change facet_grid
-fig5 <- data_fig5 %>%
-  select(region, cruise, pop, gyre, season, contains(para)) %>%
-  rename(param = contains(para)) %>%
-  ggplot(aes(x = param, color = gyre, fill = gyre)) + 
-  geom_histogram(aes(y = ..count../sum(..count..)), alpha = 0.4, bins = 30, position = "identity") +  
-  facet_grid(region ~ pop, scale = "free") +
-  scale_color_manual(values=gyre_cols) +
-  scale_fill_manual(values=gyre_cols) +
-  theme_bw(base_size = 20) +
-  labs(x = ylab, y = "proportion")
-
 
 ### save plot
-png(paste0("figures/",name,"-distance-cruise.png"), width = 2500, height = 1600, res = 200)
-print(fig1)
-dev.off()
-
-png(paste0("figures/",name,"-distance-region.png"), width = 2500, height = 1200, res = 200)
-print(fig2)
-dev.off()
-
-png(paste0("figures/",name,"-gyre-hist.png"), width = 2500, height = 1200, res = 200)
+png(paste0("figures/",name,"-distance-stacked.png"), width = 2500, height = 1600, res = 200)
 print(fig3)
-dev.off()
-
-png(paste0("figures/",name,"-gyre-hist-cruise.png"), width = 2500, height = 800, res = 200)
-print(fig4)
-dev.off()
-
-png(paste0("figures/",name,"-gyre-hist-region.png"), width = 2500, height = 1200, res = 200)
-print(fig5)
-dev.off()
-
-
-### plotting nutrients
-data_nutr <- data_figure[, c("region", "cruise", "pop", "distance", "NO3_NO2_mean", "PO4_mean")]
-data_nutr <- data_nutr %>%
-  dplyr::rename(NO3_NO2 = NO3_NO2_mean, PO4 = PO4_mean) %>%
-  gather(nutrient, concentration, 5:6)
-data_nutr$modeled <- "modeled"
-actual <- which(data_nutr$cruise == "Gradients 1" | data_nutr$cruise == "Gradients 2" | data_nutr$cruise == "Gradients 3" | data_nutr$cruise == "TN398")
-data_nutr$modeled[actual] <- "observed"
-
-
-fig_nutr <- data_nutr %>%
-  ggplot(aes(distance, concentration, col = nutrient, shape = modeled)) + 
-  geom_point(size = 2) +
-  #geom_line(aes(group = nutrient), lwd = 1) +
-  #geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
-  scale_color_manual(values=c(viridis(4)[1], viridis(4)[3])) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  theme_bw(base_size = 15) +
-  facet_wrap(. ~ cruise, scale = "free") +
-  labs(y = "nutrient concentration (μg / L)", x = "distance (km)")
-
-png(paste0("figures/", "nutr-cruise.png"), width = 2500, height = 1200, res = 200)
-print(fig_nutr)
-dev.off()
-
-# plotting individually
-
-para <- "NO3_NO2"; ylab <- "nitrate and nitrite concentration (μg / L)"; name <- "nitrate"
-para <- "PO4"; ylab <- "phosphate concentration (μg / L)"; name <- "phosphate"
-#para <- "SiO4"; ylab <- "silicate concentration (μg / L)"; name <- "silicate"
-
-### plotting parameter over distance per cruise
-
-fig6 <- data_figure %>%
-  select(region, cruise, pop, distance, contains(para)) %>%
-  rename(mean = contains("mean"), sd = contains("sd")) %>%
-  ggplot(aes(distance, mean)) + 
-  geom_point() +
-  geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  theme_bw() +
-  facet_wrap(. ~ cruise, scale = "free") +
-  labs(y = ylab, x = "distance (km)")
-
-### plotting histogram of parameter inside vs outside the gyre
-
-fig7 <- data_figure %>%
-  select(region, cruise, pop, gyre, contains(para)) %>%
-  rename(mean = contains("mean")) %>%
-  ggplot(aes(x = mean, color = gyre, fill = gyre)) + 
-  geom_density(aes(y = ..scaled..), alpha = 0.4, bins = 50, position = "identity") +
-  scale_color_manual(values=gyre_cols) +
-  scale_fill_manual(values=gyre_cols) +
-  theme_bw() +
-  labs(x = ylab)
-
-### save plot
-
-png(paste0("figures/",name,"-gyre-cruise.png"), width = 2500, height = 1200, res = 200)
-print(fig6)
-dev.off()
-  
-png(paste0("figures/",name,"-gyre-hist.png"), width = 2500, height = 1200, res = 200)
-print(fig7)
 dev.off()
 
 
@@ -601,57 +429,39 @@ dev.off()
 meta_gyre_d$day <- substr(meta_gyre_d$date, 1, 10)
 diam_data <- meta_gyre_d %>%
   group_by(cruise, pop, day, gyre) %>%
-  dplyr::summarise_at(c("diam", "c_per_uL", "daily_growth", "NO3_NO2", "PO4"), list(mean), na.rm=T) %>%
+  dplyr::summarise_at(c("diam", "c_per_uL", "NO3_NO2", "PO4"), list(mean), na.rm=T) %>%
   gather(nutrient, concentration, 7:8)
 
-fig8 <- diam_data %>%
+nutrient_names <- list("NO3_NO2" = "nitrate", "PO4" = "phosphate")
+pop_names <- list("prochloro" = "prochlorococcus", "synecho" = "synechococcus", "picoeuk" = "picoeukaryotes")
+pop_labeller <- function(variable, value){
+    return(pop_names[value])
+}
+
+fig4 <- diam_data %>%
   ggplot(aes(diam, concentration, col = gyre)) + 
   geom_point() +
   theme_bw(base_size = 20) +
   #geom_smooth(method = "lm", formula = y~x) +
   #scale_x_continuous(trans="log") +
   scale_color_manual(values=c(viridis(5)[1], viridis(5)[4], viridis(5)[5])) +
-  facet_grid(nutrient ~ pop, scale = "free") +
-  labs(x = "daily diameter (μm)", y = "nutrient concentration (μg/L)")
+  facet_grid(nutrient ~ pop, scale = "free", labeller = labeller(nutrient=nutrient_labeller, pop=pop_labeller)) +
+  labs(x = "equivalent spherical diameter (μm)", y = "nutrient concentration (μg/L)")
 
 
-### plotting nutrients against phytoplankton biomass
-
-fig9 <- diam_data %>%
-  select(cruise, pop, gyre, c_per_uL, contains(para)) %>%
-  dplyr::rename(mean = contains(para)) %>%
-  ggplot(aes(mean, c_per_uL, col = gyre)) + 
-  geom_point() +
-  theme_bw() +
-  geom_smooth(method = "lm", formula = y~x) +
-  scale_color_manual(values=gyre_cols) +
-  facet_wrap(pop ~ ., scale = "free") +
-  labs(x = ylab, y = "biomass (μgC / L)")
-
-### plotting nutrients against growth rate
-
-fig10 <- diam_data %>%
-  select(cruise, pop, gyre, daily_growth, contains(para)) %>%
-  rename(mean = contains(para)) %>%
-  ggplot(aes(mean, daily_growth, col = gyre)) + 
-  geom_point() +
-  theme_bw() +
-  geom_smooth(method = "lm", formula = y~x) +
-  scale_color_manual(values=gyre_cols) +
-  facet_wrap(pop ~ ., scale = "free") +
-  labs(x = ylab, y = "daily growth rate")
-
-
-### save plots
+### save plot
 
 png(paste0("figures/","nutr-diam.png"), width = 2500, height = 1200, res = 200)
-print(fig8)
+print(fig4)
 dev.off()
 
-png(paste0("figures/",name,"-biomass.png"), width = 2500, height = 1200, res = 200)
-print(fig9)
-dev.off()
+### correlation plot
+corplot_all_df <- meta_gyre_d[, c("pop", "c_per_uL", "diam", "NO3_NO2", "PO4", "salinity", "temp")]
+corplot_all_df <- corplot_all_df %>% pivot_wider(names_from = pop, values_from = c(c_per_uL, diam))
 
-png(paste0("figures/",name,"-growthrate.png"), width = 2500, height = 1200, res = 200)
-print(fig10)
+cor_all <- cor(corplot_all_df, use = "complete.obs")
+cor_all_p <- cor.mtest(corplot_all_df, use = "complete.obs", conf.level = .99)
+
+png(paste0("figures/","all-corr.png"), width = 2500, height = 1600, res = 200)
+fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank", type = "lower", method = "color", addCoef.col ='black', number.cex = 0.8)
 dev.off()
