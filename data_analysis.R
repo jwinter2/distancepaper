@@ -297,6 +297,11 @@ g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ cruise, mode = "s
 ### Calculate mean and sd over binned distance from the edges of the NPSG
 res <- 100 # km (i.e data binned every 100 km)
 
+
+### remove data far outside the gyre
+faraway_id <- which(meta_gyre_d$distance > 2000)
+meta_gyre_d <- meta_gyre_d[-faraway_id,]
+
 d <- range(meta_gyre_d$distance)
 data_figure <- meta_gyre_d %>%
   group_by(cruise, pop, 
@@ -306,10 +311,6 @@ data_figure <- meta_gyre_d %>%
     sd = function(x) sd(x, na.rm = TRUE))) %>%
 mutate(distance = as.numeric(as.character(distance))) %>%
 ungroup(cruise)
-
-### remove subpolar data
-subpolar_id <- which(data_figure$cruise == "KM1712" & data_figure$distance > 2500)
-data_figure <- data_figure[-subpolar_id,]
 
 ### uncertainties in front location
 binning <- res # uncertainties due to binning
@@ -394,23 +395,20 @@ para <- "diam"; ylab <- "equivalent spherical diameter (μm)"; name <- "diameter
 
 
 ### set colors
-pop_cols <- c("prochloro" = viridis(3)[1], "synecho" = viridis(3)[3], "picoeuk" = viridis(3)[2])
-gyre_cols <- c("inside" = viridis(5)[1], "outside" = viridis(5)[4])
+pop_cols <- c("prochloro" = rocket(7)[6], "synecho" = rocket(7)[4], "picoeuk" = rocket(7)[2])
 
 ### pop as factors
-data_figure$pop <- as.factor(data_figure$pop)
-levels(data_figure$pop) <- c("prochloro", "synecho", "picoeuk", "croco", "beads", "unknown")
+data_figure$pop <- factor(data_figure$pop, levels = c("prochloro", "synecho", "picoeuk", "croco", "beads", "unknown"))
 
 ### plotting parameter over distance per cruise
 fig3 <- data_figure %>%
  select(cruise, pop, distance, contains(para)) %>%
- rename(mean = contains("mean"), sd = contains("sd")) %>%
+ rename(mean = contains("mean")) %>%
   ggplot(aes(distance, mean,  col = pop, fill = pop)) + 
     geom_line(aes(group = pop), lwd = 1, position = "stack") + 
     geom_area(position = "stack", stat = "identity", alpha = 0.5) +
-    #geom_linerange(aes(ymax = mean + sd, ymin = mean - sd)) +
     geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-    scale_fill_manual(values = pop_cols, name = "population") +
+    scale_fill_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
     scale_color_manual(values = pop_cols, guide = "none") +
     facet_wrap(. ~ cruise, scale = "free_x") +
     theme_bw(base_size = 20) +
@@ -429,39 +427,37 @@ dev.off()
 meta_gyre_d$day <- substr(meta_gyre_d$date, 1, 10)
 diam_data <- meta_gyre_d %>%
   group_by(cruise, pop, day, gyre) %>%
-  dplyr::summarise_at(c("diam", "c_per_uL", "NO3_NO2", "PO4"), list(mean), na.rm=T) %>%
-  gather(nutrient, concentration, 7:8)
+  dplyr::summarise_at(c("diam", "c_per_uL", "NO3_NO2"), list(mean), na.rm=T)
 
-nutrient_names <- list("NO3_NO2" = "nitrate", "PO4" = "phosphate")
+diam_data$pop <- factor(diam_data$pop, levels = c("prochloro", "synecho", "picoeuk", "croco", "beads", "unknown"))
 pop_names <- list("prochloro" = "prochlorococcus", "synecho" = "synechococcus", "picoeuk" = "picoeukaryotes")
 pop_labeller <- function(variable, value){
     return(pop_names[value])
 }
 
 fig4 <- diam_data %>%
-  ggplot(aes(diam, concentration, col = gyre)) + 
+  ggplot(aes(diam, NO3_NO2, col = gyre, levels = pop)) + 
   geom_point() +
   theme_bw(base_size = 20) +
-  #geom_smooth(method = "lm", formula = y~x) +
-  #scale_x_continuous(trans="log") +
   scale_color_manual(values=c(viridis(5)[1], viridis(5)[4], viridis(5)[5])) +
-  facet_grid(nutrient ~ pop, scale = "free", labeller = labeller(nutrient=nutrient_labeller, pop=pop_labeller)) +
+  facet_grid(.~ pop, scale = "free", labeller = pop_labeller) +
   labs(x = "equivalent spherical diameter (μm)", y = "nutrient concentration (μg/L)")
 
 
 ### save plot
 
-png(paste0("figures/","nutr-diam.png"), width = 2500, height = 1200, res = 200)
+png(paste0("figures/","nutr-diam.png"), width = 2500, height = 800, res = 200)
 print(fig4)
 dev.off()
 
 ### correlation plot
-corplot_all_df <- meta_gyre_d[, c("pop", "c_per_uL", "diam", "NO3_NO2", "PO4", "salinity", "temp")]
-corplot_all_df <- corplot_all_df %>% pivot_wider(names_from = pop, values_from = c(c_per_uL, diam))
+corplot_all_df <- meta_gyre_d[, c("pop", "c_per_uL", "diam", "NO3_NO2", "salinity", "temp", "par")]
+corplot_all_df <- corplot_all_df %>% na.omit() %>% pivot_wider(names_from = pop, values_from = c(c_per_uL, diam))
+colnames(corplot_all_df) <- c("nitrate", "salinity", "temperature", "par", "biomass pico", "biomass syn", "biomass pro", "diameter pico", "diameter syn", "diameter pro")
 
 cor_all <- cor(corplot_all_df, use = "complete.obs")
 cor_all_p <- cor.mtest(corplot_all_df, use = "complete.obs", conf.level = .99)
 
 png(paste0("figures/","all-corr.png"), width = 2500, height = 1600, res = 200)
-fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank", type = "lower", method = "color", addCoef.col ='black', number.cex = 0.8)
+fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank", type = "lower", method = "square", addgrid.col = F, tl.col = "black", col = c('steelblue3', 'firebrick3'))
 dev.off()
