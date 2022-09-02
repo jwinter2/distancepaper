@@ -303,6 +303,13 @@ faraway_id <- which(meta_gyre_d$distance > 2000)
 meta_gyre_d <- meta_gyre_d[-faraway_id,]
 
 d <- range(meta_gyre_d$distance)
+
+meta_gyre_d <- meta_gyre_d %>%
+  group_by(floor_date(date, unit = "days")) %>%
+  mutate(daily_par = mean(par)) %>%
+  ungroup()
+meta_gyre_d <- meta_gyre_d[, -22]
+
 data_figure <- meta_gyre_d %>%
   group_by(cruise, pop, 
     distance = cut(distance, seq(d[1],d[2], by = res), 
@@ -311,6 +318,7 @@ data_figure <- meta_gyre_d %>%
     sd = function(x) sd(x, na.rm = TRUE))) %>%
 mutate(distance = as.numeric(as.character(distance))) %>%
 ungroup(cruise)
+
 
 ### uncertainties in front location
 binning <- res # uncertainties due to binning
@@ -357,34 +365,35 @@ print(g)
 dev.off()
 
 
-### plotting nutrients
-data_nutr <- data_figure[, c("cruise", "pop", "distance", "NO3_NO2_mean", "PO4_mean")]
-data_nutr <- data_nutr %>%
-  dplyr::rename(NO3_NO2 = NO3_NO2_mean, PO4 = PO4_mean) %>%
-  gather(nutrient, concentration, 4:5)
-data_nutr$modeled <- "modeled"
-actual <- which(data_nutr$cruise == "KOK1606" | data_nutr$cruise == "MGL1704" | data_nutr$cruise == "KM1906" | data_nutr$cruise == "TN398")
-data_nutr$modeled[actual] <- "observed"
-ind_nutr <- which(data_nutr$cruise == "KM1923" & data_nutr$distance > 1750)
-data_nutr <- data_nutr[-ind_nutr,]
+### plotting environmental variables
+data_scaled <- data_figure[!duplicated(data_figure$date_mean),]
 
-nutrient_names <- list("NO3_NO2" = "nitrate", "PO4" = "phosphate")
-nutrient_labeller <- function(variable, value){
-  return(nutrient_names[value])
-}
+par_scaled <- rescale(data_scaled$daily_par_mean, to = c(0,100), from = range(data_scaled$daily_par_mean, na.rm = T))
+data_scaled$par_scaled <- par_scaled
 
+temp_scaled <- rescale(data_scaled$temp_mean, to = c(0,100), from = range(data_scaled$temp_mean, na.rm = T))
+data_scaled$temp_scaled <- temp_scaled
 
-fig_nutr <- data_nutr %>%
-  ggplot(aes(distance, concentration, col = cruise, shape = modeled)) + 
-  geom_point(size = 2) +
-  scale_color_manual(values=viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) +
-  theme_bw(base_size = 15) +
-  facet_wrap(. ~ nutrient, scale = "free", labeller=nutrient_labeller) +
-  labs(y = "nutrient concentration (μg / L)", x = "distance (km)")
+salinity_scaled <- rescale(data_scaled$salinity_mean, to = c(0,100), from = range(data_scaled$salinity_mean, na.rm = T))
+data_scaled$salinity_scaled <- salinity_scaled
 
-png(paste0("figures/", "nutr-cruise.png"), width = 2500, height = 1200, res = 200)
-print(fig_nutr)
-dev.off()
+nitrate_scaled <- rescale(data_scaled$NO3_NO2_mean, to = c(0,100), from = range(data_scaled$NO3_NO2_mean, na.rm = T))
+data_scaled$nitrate_scaled <- nitrate_scaled
+
+data_scaled <- data_scaled %>% pivot_longer(cols=c("par_scaled", "temp_scaled", "salinity_scaled", "nitrate_scaled"), names_to="scaled_type", values_to="scaled_numbers")
+
+scaled_cols <- c("par_scaled" = magma(7)[6], "temp_scaled" = magma(7)[4], "salinity_scaled" = magma(7)[2], "nitrate_scaled" = magma(7)[1])
+
+fig2 <- data_scaled %>%
+  ggplot(aes(distance, scaled_numbers,  col = scaled_type, fill = scaled_type)) + 
+  geom_line(aes(group = scaled_type), lwd = 1, position = "identity") + 
+  geom_area(position = "identity", stat = "identity", alpha = 0.5) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  scale_fill_manual(values = scaled_cols, name = "variable", labels = c("PAR", "temperature", "salinity", "nitrate")) +
+  scale_color_manual(values = scaled_cols, guide = "none") +
+  facet_wrap(. ~ cruise, scale = "free_x") +
+  theme_bw(base_size = 20) +
+  labs(y = "scaled value", x = "distance (km)")
 
 ### choose a parameter
 para <- "n_per_uL"; ylab <- "abundance (cells / μL)"; name <- "abundance"
@@ -435,29 +444,68 @@ pop_labeller <- function(variable, value){
     return(pop_names[value])
 }
 
-fig4 <- diam_data %>%
-  ggplot(aes(diam, NO3_NO2, col = gyre, levels = pop)) + 
-  geom_point() +
-  theme_bw(base_size = 20) +
+# do this per population
+diam_data_pro <- diam_data %>% filter(pop == "prochloro")
+
+fig4 <- diam_data_pro %>%
+  ggplot(aes(diam, NO3_NO2, col = gyre)) + 
+  geom_point(size = 3) +
+  theme_bw(base_size = 15) +
   scale_color_manual(values=c(viridis(5)[1], viridis(5)[4], viridis(5)[5])) +
-  facet_grid(.~ pop, scale = "free", labeller = pop_labeller) +
+  facet_wrap(.~ cruise, scale = "free", ncol = 3) +
   labs(x = "equivalent spherical diameter (μm)", y = "nutrient concentration (μg/L)")
 
 
 ### save plot
 
-png(paste0("figures/","nutr-diam.png"), width = 2500, height = 800, res = 200)
+png(paste0("figures/","nutr-diam-pro.png"), width = 2500, height = 2000, res = 200)
 print(fig4)
 dev.off()
 
 ### correlation plot
-corplot_all_df <- meta_gyre_d[, c("pop", "c_per_uL", "diam", "NO3_NO2", "salinity", "temp", "par")]
-corplot_all_df <- corplot_all_df %>% na.omit() %>% pivot_wider(names_from = pop, values_from = c(c_per_uL, diam))
-colnames(corplot_all_df) <- c("nitrate", "salinity", "temperature", "par", "biomass pico", "biomass syn", "biomass pro", "diameter pico", "diameter syn", "diameter pro")
+corplot_all_df <- data_figure[, c("pop", "c_per_uL_mean", "diam_mean", "NO3_NO2_mean", "salinity_mean", "temp_mean", "daily_par_mean")]
+corplot_all_df <- corplot_all_df %>% na.omit() %>% pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean))
+colnames(corplot_all_df) <- c("nitrate", "salinity", "temperature", "daily par", "biomass pico", "biomass pro", "biomass syn", "diameter pico", "diameter pro", "diameter syn")
 
 cor_all <- cor(corplot_all_df, use = "complete.obs")
 cor_all_p <- cor.mtest(corplot_all_df, use = "complete.obs", conf.level = .99)
 
 png(paste0("figures/","all-corr.png"), width = 2500, height = 1600, res = 200)
-fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank", type = "lower", method = "square", addgrid.col = F, tl.col = "black", col = c('steelblue3', 'firebrick3'))
+fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank",
+                    type = "lower", method = "square", addgrid.col = F, tl.col = "black",
+                    col = colorRampPalette(c("blue", "black", "red"))(200))
+dev.off()
+
+
+
+
+####### supplemental figures
+
+# nutrients
+data_nutr <- data_figure[, c("cruise", "pop", "distance", "NO3_NO2_mean", "PO4_mean")]
+data_nutr <- data_nutr %>%
+  dplyr::rename(NO3_NO2 = NO3_NO2_mean, PO4 = PO4_mean) %>%
+  gather(nutrient, concentration, 4:5)
+data_nutr$modeled <- "modeled"
+actual <- which(data_nutr$cruise == "KOK1606" | data_nutr$cruise == "MGL1704" | data_nutr$cruise == "KM1906" | data_nutr$cruise == "TN398")
+data_nutr$modeled[actual] <- "observed"
+ind_nutr <- which(data_nutr$cruise == "KM1923" & data_nutr$distance > 1750)
+data_nutr <- data_nutr[-ind_nutr,]
+
+nutrient_names <- list("NO3_NO2" = "nitrate", "PO4" = "phosphate")
+nutrient_labeller <- function(variable, value){
+  return(nutrient_names[value])
+}
+
+
+fig_nutr <- data_nutr %>%
+  ggplot(aes(distance, concentration, col = cruise, shape = modeled)) + 
+  geom_point(size = 2) +
+  scale_color_manual(values=viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) +
+  theme_bw(base_size = 15) +
+  facet_wrap(. ~ nutrient, scale = "free", labeller=nutrient_labeller) +
+  labs(y = "nutrient concentration (μg / L)", x = "distance (km)")
+
+png(paste0("figures/", "nutr-cruise.png"), width = 2500, height = 1200, res = 200)
+print(fig_nutr)
 dev.off()
