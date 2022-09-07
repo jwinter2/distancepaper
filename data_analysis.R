@@ -5,6 +5,7 @@ library(sf)
 library(plotly)
 library(viridis)
 library(dplyr)
+library(corrplot)
 
 # Francois
 setwd("~/Documents/Codes/distancepaper") # path to github repository
@@ -72,6 +73,7 @@ env<- env %>%
   mutate(daily_par = mean(par)) %>%
   ungroup() %>%
   select(!days)
+
 #-------------------
 # Phytoplankton data
 #-------------------
@@ -391,37 +393,25 @@ dev.off()
 
 
 ### take mean diameter per day
-meta_gyre_d$day <- substr(meta_gyre_d$date, 1, 10)
-diam_data <- meta_gyre_d %>%
-  group_by(cruise, pop, day, gyre) %>%
-  dplyr::summarise_at(c("diam", "c_per_uL", "NO3_NO2"), list(mean), na.rm=T)
 
-diam_data$pop <- factor(diam_data$pop, levels = c("prochloro", "synecho", "picoeuk", "croco", "beads", "unknown"))
-pop_names <- list("prochloro" = "prochlorococcus", "synecho" = "synechococcus", "picoeuk" = "picoeukaryotes")
-pop_labeller <- function(variable, value){
-    return(pop_names[value])
-}
-
-# do this per population
-diam_data_pro <- diam_data %>% filter(pop == "prochloro")
-
-fig4 <- diam_data_pro %>%
-  ggplot(aes(diam, NO3_NO2, col = gyre)) + 
-  geom_point(size = 3) +
-  theme_bw(base_size = 15) +
-  scale_color_manual(values=c(viridis(5)[1], viridis(5)[4], viridis(5)[5])) +
-  facet_wrap(.~ cruise, scale = "free", ncol = 3) +
-  labs(x = "equivalent spherical diameter (μm)", y = "nutrient concentration (μg/L)")
+fig3 <- data_figures %>%
+  ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) + 
+  geom_line(aes(group = pop), lwd = 1, position = "stack") + 
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  scale_color_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
+  facet_wrap(. ~ cruise, scale = "free_x") +
+  theme_bw(base_size = 20) +
+  labs(y = "carbon quota", x = "distance (km)")
 
 
 ### save plot
 
-png(paste0("figures/","nutr-diam-pro.png"), width = 2500, height = 2000, res = 200)
-print(fig4)
+png(paste0("figures/","qc_distance.png"), width = 2500, height = 2000, res = 200)
+print(fig3)
 dev.off()
 
 ### correlation plot
-corplot_all_df <- data_figure[, c("pop", "c_per_uL_mean", "diam_mean", "NO3_NO2_mean", "salinity_mean", "temp_mean", "daily_par_mean")]
+corplot_all_df <- data_figures[, c("pop", "c_per_uL_mean", "diam_mean", "NO3_NO2_mean", "salinity_mean", "temp_mean", "daily_par_mean")]
 corplot_all_df <- corplot_all_df %>% na.omit() %>% pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean))
 colnames(corplot_all_df) <- c("nitrate", "salinity", "temperature", "daily par", "biomass pico", "biomass pro", "biomass syn", "diameter pico", "diameter pro", "diameter syn")
 
@@ -430,15 +420,15 @@ cor_all_p <- cor.mtest(corplot_all_df, use = "complete.obs", conf.level = .99)
 
 png(paste0("figures/","all-corr.png"), width = 2500, height = 1600, res = 200)
 fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank",
-                    type = "lower", method = "square", addgrid.col = F, tl.col = "black",
-                    col = colorRampPalette(c("blue", "black", "red"))(200))
+                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
+                    col = colorRampPalette(c("blue", "grey", "red"))(200))
 dev.off()
 
 
 
 
 #------------------------
-# c. Supplemental Figures 
+# d. Supplemental Figures 
 #------------------------
 # nutrients
 data_nutr <- data_figure[, c("cruise", "pop", "distance", "NO3_NO2_mean", "PO4_mean")]
