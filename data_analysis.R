@@ -295,7 +295,9 @@ meta_gyre_d  <- meta_gyre_d %>%
 ### remove data far outside the gyre
 meta_gyre_d  <- meta_gyre_d %>% filter(distance < 2000)
 
-
+## fix area in the transition zone for TN397 that appears to be inside the gyre
+id_tn397 <- which(meta_gyre_d$lat > 5 & meta_gyre_d$lat < 6 & meta_gyre_d$lon > 220)
+meta_gyre_d$gyre[id_tn397] <- "transition"
 
 #--------------------------
 # b. BINNING OVER DISTANCE
@@ -341,7 +343,34 @@ g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "sca
 #g
 
 
+#---------------------------
+# B. Calculate carbon growth
+#---------------------------
+### calculate rate of increase in carbon quotas during daylight (~ net carbon fixation)
+meta_gyre_d <- meta_gyre_d %>% mutate(daytime = case_when(par > 10 ~ 1, TRUE ~ 0), # find daytime based on PAR values
+                                      time_local = as.Date(date - 10 * 60 * 60)) %>%
+  group_by(cruise, pop, daytime, time_local) %>%
+  mutate(daily_growth = 60 * 60 * lm(qc ~ date)$coefficients[2] / mean(qc),
+         growth_stderror = as.numeric(60 * 60 * broom::tidy(lm(qc ~ date))[2,3]),
+         growth_pvalue = as.numeric(broom::tidy(lm(qc ~ date))[2,5]),
+         period = as.numeric(diff(range(date)))) # period (in hours) of daylight
 
+### curation of growth rate
+meta_gyre_d <- meta_gyre_d %>%
+  mutate(daily_growth = case_when( 
+    daytime == 0 ~ NaN, # remove `growth` during nighttime
+    growth_pvalue >= 0.01 ~ NaN, # NA's if p-value of grwoth rae is less than 0.01
+    period < 6 ~ NaN, # NA's if daylight is less than 6 hours apart
+    daily_growth < 0 ~ NaN, 
+    TRUE ~ daily_growth)) %>%
+  ungroup(time_local, daytime) %>%
+  select(!c(time_local, daytime, period, growth_pvalue))
+
+### plot daily growth estimates foreach cruise over time
+# meta_gyre_d %>% ggplot(aes(distance, daily_growth, col = pop)) +
+#   geom_pointrange(aes(ymin = daily_growth - growth_stderror, ymax = daily_growth + growth_stderror)) +
+#   facet_wrap(. ~ cruise, scale = "free_x") +
+#   theme_bw()
 
 
 
