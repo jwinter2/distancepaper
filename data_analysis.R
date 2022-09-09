@@ -299,6 +299,36 @@ meta_gyre_d  <- meta_gyre_d %>% filter(distance < 2000)
 id_tn397 <- which(meta_gyre_d$lat > 5 & meta_gyre_d$lat < 6 & meta_gyre_d$lon > 220)
 meta_gyre_d$gyre[id_tn397] <- "transition"
 
+
+#---------------------------
+# Calculate carbon growth
+#---------------------------
+### calculate rate of increase in carbon quotas during daylight (~ net carbon fixation)
+meta_gyre_d <- meta_gyre_d %>% mutate(daytime = case_when(par > 10 ~ 1, TRUE ~ 0), # find daytime based on PAR values
+                                      time_local = as.Date(date - 10 * 60 * 60)) %>%
+  group_by(cruise, pop, daytime, time_local) %>%
+  mutate(daily_growth = 60 * 60 * lm(qc ~ date)$coefficients[2] / mean(qc),
+         growth_stderror = as.numeric(60 * 60 * broom::tidy(lm(qc ~ date))[2,3]),
+         growth_pvalue = as.numeric(broom::tidy(lm(qc ~ date))[2,5]),
+         period = as.numeric(diff(range(date)))) # period (in hours) of daylight
+
+### curation of growth rate
+meta_gyre_d <- meta_gyre_d %>%
+  mutate(daily_growth = case_when( 
+    daytime == 0 ~ NaN, # remove `growth` during nighttime
+    growth_pvalue >= 0.01 ~ NaN, # NA's if p-value of grwoth rae is less than 0.01
+    period < 6 ~ NaN, # NA's if daylight is less than 6 hours apart
+    daily_growth < 0 ~ NaN, 
+    TRUE ~ daily_growth)) %>%
+  ungroup(time_local, daytime) %>%
+  select(!c(time_local, daytime, period, growth_pvalue))
+
+### plot daily growth estimates foreach cruise over time
+# meta_gyre_d %>% ggplot(aes(distance, daily_growth, col = pop)) +
+#   geom_pointrange(aes(ymin = daily_growth - growth_stderror, ymax = daily_growth + growth_stderror)) +
+#   facet_wrap(. ~ cruise, scale = "free_x") +
+#   theme_bw()
+
 #--------------------------
 # b. BINNING OVER DISTANCE
 #--------------------------
@@ -341,37 +371,6 @@ for (cruise_name in unique(front_uncertainties$cruise)){
 # plot cruise tracks
 g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>%  layout(geo = geo)
 #g
-
-
-#---------------------------
-# B. Calculate carbon growth
-#---------------------------
-### calculate rate of increase in carbon quotas during daylight (~ net carbon fixation)
-meta_gyre_d <- meta_gyre_d %>% mutate(daytime = case_when(par > 10 ~ 1, TRUE ~ 0), # find daytime based on PAR values
-                                      time_local = as.Date(date - 10 * 60 * 60)) %>%
-  group_by(cruise, pop, daytime, time_local) %>%
-  mutate(daily_growth = 60 * 60 * lm(qc ~ date)$coefficients[2] / mean(qc),
-         growth_stderror = as.numeric(60 * 60 * broom::tidy(lm(qc ~ date))[2,3]),
-         growth_pvalue = as.numeric(broom::tidy(lm(qc ~ date))[2,5]),
-         period = as.numeric(diff(range(date)))) # period (in hours) of daylight
-
-### curation of growth rate
-meta_gyre_d <- meta_gyre_d %>%
-  mutate(daily_growth = case_when( 
-    daytime == 0 ~ NaN, # remove `growth` during nighttime
-    growth_pvalue >= 0.01 ~ NaN, # NA's if p-value of grwoth rae is less than 0.01
-    period < 6 ~ NaN, # NA's if daylight is less than 6 hours apart
-    daily_growth < 0 ~ NaN, 
-    TRUE ~ daily_growth)) %>%
-  ungroup(time_local, daytime) %>%
-  select(!c(time_local, daytime, period, growth_pvalue))
-
-### plot daily growth estimates foreach cruise over time
-# meta_gyre_d %>% ggplot(aes(distance, daily_growth, col = pop)) +
-#   geom_pointrange(aes(ymin = daily_growth - growth_stderror, ymax = daily_growth + growth_stderror)) +
-#   facet_wrap(. ~ cruise, scale = "free_x") +
-#   theme_bw()
-
 
 
 #----------------
@@ -421,22 +420,41 @@ print(fig2)
 dev.off()
 
 
-### take mean diameter per day
+### carbon quota
 
 fig3 <- data_figures %>%
   ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) + 
-  geom_line(aes(group = pop), lwd = 1, position = "stack") + 
+  geom_line(aes(group = pop), lwd = 1) + 
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
   scale_color_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
   facet_wrap(. ~ cruise, scale = "free_x") +
+  scale_y_continuous(trans = "log", breaks = c(.03, .1, .3, 1), labels = c(.03, .1, .3, 1)) +
   theme_bw(base_size = 20) +
-  labs(y = "carbon quota", x = "distance (km)")
+  labs(y = "carbon quota (pg C/cell)", x = "distance (km)")
 
 
 ### save plot
 
-png(paste0("figures/","qc_distance.png"), width = 2500, height = 2000, res = 200)
+png(paste0("figures/","Figure_3.png"), width = 2500, height = 2000, res = 200)
 print(fig3)
+dev.off()
+
+### growth rate
+
+fig4 <- data_figures %>%
+  ggplot(aes(distance, daily_growth_mean,  col = pop, fill = pop)) + 
+  geom_line(data = data_figures[!is.na(data_figures$daily_growth_mean),],aes(group = pop), lwd = 1) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  scale_color_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
+  facet_wrap(. ~ cruise, scale = "free_x") +
+  theme_bw(base_size = 20) +
+  labs(y = "growth rate", x = "distance (km)")
+
+
+### save plot
+
+png(paste0("figures/","Figure_4.png"), width = 2500, height = 2000, res = 200)
+print(fig4)
 dev.off()
 
 ### correlation plot
