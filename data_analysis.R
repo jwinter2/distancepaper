@@ -16,8 +16,6 @@ setwd("~/Downloads/distancepaper/")
 #-----------------
 # For plotting map
 #-----------------
-library(plotly)
-library(viridis)
 
 geo <- list(
   showland = TRUE,
@@ -333,7 +331,7 @@ meta_gyre_d <- meta_gyre_d %>%
 # b. BINNING OVER DISTANCE
 #--------------------------
 ### Calculate mean and sd over binned distance from the edges of the NPSG
-res <- 100 # km (i.e data binned every 100 km)
+res <- 200 # km (i.e data binned every 100 km)
 
 d <- range(meta_gyre_d$distance)
 
@@ -368,6 +366,8 @@ for (cruise_name in unique(front_uncertainties$cruise)){
   meta_gyre_d$gyre[down] <- "transition"
 }
 
+
+
 # plot cruise tracks
 g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>%  layout(geo = geo)
 #g
@@ -378,7 +378,9 @@ g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "sca
 #----------------
 
 # plot cruise track
-fig1 <- meta_gyre_d %>%ggplot() +
+fig1 <- meta_gyre_d %>%
+  filter(distance > -1500) %>%
+  ggplot() +
   geom_point(aes(lon - 360, lat, color = gyre), size=2, alpha = 0.7, show.legend = T) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
@@ -402,7 +404,8 @@ data_figures$pop <- factor(data_figures$pop, levels = c("picoeuk", "synecho", "p
 coeff <- 4
 
 fig2 <- data_figures %>%
-  ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) + 
+  filter(distance > -1500) %>%
+    ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) + 
     geom_line(aes(group = pop), lwd = 1, position = "stack") + 
     geom_area(position = "stack",alpha = 0.5) +
     geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1) + 
@@ -411,7 +414,7 @@ fig2 <- data_figures %>%
     scale_color_manual(values = pop_cols, guide = "none") +
     scale_y_continuous(name = "biomass (μgC/L)",
       sec.axis = sec_axis( trans=~./coeff, name="DIN (µmol/L)")) +
-    facet_wrap(. ~ cruise, scale = "free_x") +
+    facet_wrap(. ~ cruise) +
     theme_bw(base_size = 20) +
     labs(y = "biomass (μgC/L)", x = "distance (km)")
 
@@ -423,17 +426,15 @@ dev.off()
 ### carbon quota
 
 fig3 <- data_figures %>%
+  filter(distance > -1500) %>%
   ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) + 
   geom_line(aes(group = pop), lwd = 1) + 
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
   scale_color_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
-  facet_wrap(. ~ cruise, scale = "free_x") +
-  scale_y_continuous(trans = "log", breaks = c(.03, .1, .3, 1), labels = c(.03, .1, .3, 1)) +
+  scale_y_continuous(trans='log10') +
+  facet_wrap(. ~ cruise) +
   theme_bw(base_size = 20) +
   labs(y = "carbon quota (pg C/cell)", x = "distance (km)")
-
-
-### save plot
 
 png(paste0("figures/","Figure_3.png"), width = 2500, height = 2000, res = 200)
 print(fig3)
@@ -468,8 +469,16 @@ cor_all_p <- cor.mtest(corplot_all_df, use = "complete.obs", conf.level = .99)
 png(paste0("figures/","all-corr.png"), width = 2500, height = 1600, res = 200)
 fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank",
                     type = "lower", method = "color", addgrid.col = F, tl.col = "black",
-                    col = colorRampPalette(c("blue", "grey", "red"))(200))
+                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
 dev.off()
+
+
+
+
+
+
+
+
 
 
 
@@ -483,7 +492,10 @@ data_nutr <- data_nutr %>%
   dplyr::rename(NO3_NO2 = NO3_NO2_mean, PO4 = PO4_mean) %>%
   gather(nutrient, concentration, 4:5)
 data_nutr$modeled <- "modeled"
-actual <- which(data_nutr$cruise == "KOK1606" | data_nutr$cruise == "MGL1704" | data_nutr$cruise == "KM1906" | data_nutr$cruise == "TN398")
+actual <- which(data_nutr$cruise == "KOK1606" | 
+                  data_nutr$cruise == "MGL1704" | 
+                  data_nutr$cruise == "KM1906" | 
+                  data_nutr$cruise == "TN398")
 data_nutr$modeled[actual] <- "observed"
 ind_nutr <- which(data_nutr$cruise == "KM1923" & data_nutr$distance > 1750)
 data_nutr <- data_nutr[-ind_nutr,]
