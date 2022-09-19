@@ -429,7 +429,7 @@ fig3 <- data_figures %>%
   filter(distance > -1500) %>%
   ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) + 
   geom_line(aes(group = pop), lwd = 1) + 
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = 0.02, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
   scale_color_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
   scale_y_continuous(trans='log10') +
   facet_wrap(. ~ cruise) +
@@ -443,11 +443,13 @@ dev.off()
 ### growth rate
 
 fig4 <- data_figures %>%
+  filter(distance > -1500) %>%
+  filter(!is.na(daily_growth_mean)) %>%
   ggplot(aes(distance, daily_growth_mean,  col = pop, fill = pop)) + 
-  geom_line(data = data_figures[!is.na(data_figures$daily_growth_mean),],aes(group = pop), lwd = 1) +
+  geom_line(aes(group = pop), lwd = 1) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
   scale_color_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
-  facet_wrap(. ~ cruise, scale = "free_x") +
+  facet_wrap(. ~ cruise) +
   theme_bw(base_size = 20) +
   labs(y = "growth rate", x = "distance (km)")
 
@@ -466,7 +468,7 @@ colnames(corplot_all_df) <- c("nitrate", "salinity", "temperature", "daily par",
 cor_all <- cor(corplot_all_df, use = "complete.obs")
 cor_all_p <- cor.mtest(corplot_all_df, use = "complete.obs", conf.level = .99)
 
-png(paste0("figures/","all-corr.png"), width = 2500, height = 1600, res = 200)
+png(paste0("figures/","Figure_5.png"), width = 2500, height = 1600, res = 200)
 fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank",
                     type = "lower", method = "color", addgrid.col = F, tl.col = "black",
                     col = colorRampPalette(c("blue", "grey90", "red"))(200))
