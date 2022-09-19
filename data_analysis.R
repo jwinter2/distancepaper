@@ -11,7 +11,7 @@ library(corrplot)
 setwd("~/Documents/Codes/distancepaper") # path to github repository
 
 # Jordan
-setwd("~/Downloads/distancepaper/")
+#setwd("~/Downloads/distancepaper/")
 
 #-----------------
 # For plotting map
@@ -402,6 +402,7 @@ pop_cols <- c("prochloro" = rocket(7)[6], "synecho" = rocket(7)[4], "picoeuk" = 
 data_figures$pop <- factor(data_figures$pop, levels = c("picoeuk", "synecho", "prochloro"))
 # scale nutrient to biomass data
 coeff <- 4
+coeff2 <- 1.5
 
 fig2 <- data_figures %>%
   filter(distance > -1500) %>%
@@ -409,6 +410,7 @@ fig2 <- data_figures %>%
     geom_line(aes(group = pop), lwd = 1, position = "stack") + 
     geom_area(position = "stack",alpha = 0.5) +
     geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1) + 
+    #geom_line(aes(distance, temp_mean * coeff2), col = 2) +
     geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
     scale_fill_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
     scale_color_manual(values = pop_cols, guide = "none") +
@@ -445,7 +447,7 @@ dev.off()
 fig4 <- data_figures %>%
   filter(distance > -1500) %>%
   filter(!is.na(daily_growth_mean)) %>%
-  ggplot(aes(distance, daily_growth_mean,  col = pop, fill = pop)) + 
+  ggplot(aes(distance, daily_growth_mean / qc_mean,  col = pop, fill = pop)) + 
   geom_line(aes(group = pop), lwd = 1) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
   scale_color_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
@@ -461,12 +463,15 @@ print(fig4)
 dev.off()
 
 ### correlation plot
-corplot_all_df <- data_figures[, c("pop", "c_per_uL_mean", "diam_mean", "NO3_NO2_mean", "salinity_mean", "temp_mean", "daily_par_mean")]
-corplot_all_df <- corplot_all_df %>% na.omit() %>% pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean))
-colnames(corplot_all_df) <- c("nitrate", "salinity", "temperature", "daily par", "biomass pico", "biomass pro", "biomass syn", "diameter pico", "diameter pro", "diameter syn")
+corr_data <- data_figures %>% 
+  select(pop, c_per_uL_mean, qc_mean, daily_growth_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  na.omit() %>% 
+  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, qc_mean, daily_growth_mean))
 
-cor_all <- cor(corplot_all_df, use = "complete.obs")
-cor_all_p <- cor.mtest(corplot_all_df, use = "complete.obs", conf.level = .99)
+colnames(corr_data) <- c("nitrate", "salinity", "temperature", "daily par", "biomass pico", "biomass pro", "biomass syn", "size pico", "size pro", "size syn", "growth pico", "growth pro", "growth syn")
+
+cor_all <- cor(corr_data, use = "complete.obs")
+cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
 
 png(paste0("figures/","Figure_5.png"), width = 2500, height = 1600, res = 200)
 fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank",
