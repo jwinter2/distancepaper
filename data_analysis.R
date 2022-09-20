@@ -76,8 +76,15 @@ env<- env %>%
 # Phytoplankton data
 #-------------------
 seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-24.parquet") %>%
-  filter(pop != "croco") # remove this population as it is only found in low abundance in too few cruises
- 
+  filter(pop != "croco") %>% # remove this population as it is only found in low abundance in too few cruises
+  group_by(pop) %>%
+    mutate(pop = case_when(
+      pop == "prochloro" ~ "Prochlorococcus",
+      pop == "synecho" ~ "Synechococcus",
+      pop == "picoeuk" & esd < 2 ~ "picoeukaryotes (< 2µm)",
+      TRUE ~ "nanoeukaryotes (2-5µm)")) 
+
+
 # Note for conversion from carbon per cell to equivalent spherical diameter
 # Menden-Deuer, S. & Lessard, E. J. Carbon to volume relationships for dinoflagellates, diatoms, and other protist plankton. Limnol. Oceanogr. 45, 569–579 (2000).
 d <- 0.261; e <- 0.860 # < 3000 µm3 
@@ -93,6 +100,7 @@ seaflow <- seaflow_psd %>%
       diam = round(2*(3/(4*base::pi)*(qc/d)^(1/e))^(1/3),5)) %>% # convert carbon per cell to equivalent spherical diameter *
     arrange(date) %>%
     ungroup(cruise) 
+
 
 #----------------------------------------------------
 # Combine environmental data with phytoplankton  data
@@ -397,42 +405,60 @@ dev.off()
 
 ### plot biomass over distance per cruise
 # set colors
-pop_cols <- c("prochloro" = rocket(7)[6], "synecho" = rocket(7)[4], "picoeuk" = rocket(7)[2])
+pop_names <- unique(data_figures$pop)
+
+pop_cols <- c("Prochlorococcus" = rocket(7)[6], "Synechococcus" = rocket(7)[4], "picoeukaryotes (< 2µm)" = rocket(7)[3],  "nanoeukaryotes (2-5µm)" = rocket(7)[2])
 # reorder population
-data_figures$pop <- factor(data_figures$pop, levels = c("picoeuk", "synecho", "prochloro"))
+data_figures$pop <- factor(data_figures$pop, levels = rev(c(pop_names[3], pop_names[4], pop_names[2], pop_names[1])))
 # scale nutrient to biomass data
 coeff <- 4
-coeff2 <- 1.5
 
-fig2 <- data_figures %>%
+fig2a <- data_figures %>%
   filter(distance > -1500) %>%
     ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) + 
     geom_line(aes(group = pop), lwd = 1, position = "stack") + 
     geom_area(position = "stack",alpha = 0.5) +
-    geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1) + 
-    #geom_line(aes(distance, temp_mean * coeff2), col = 2) +
+    geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
     geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-    scale_fill_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
+    scale_fill_manual(values = pop_cols, name = "population") +
     scale_color_manual(values = pop_cols, guide = "none") +
     scale_y_continuous(name = "biomass (μgC/L)",
       sec.axis = sec_axis( trans=~./coeff, name="DIN (µmol/L)")) +
     facet_wrap(. ~ cruise) +
     theme_bw(base_size = 20) +
     labs(y = "biomass (μgC/L)", x = "distance (km)")
+         
+fig2b <- data_figures %>%
+  # group_by(cruise) %>%
+  # mutate(din = NO3_NO2_mean / max(NO3_NO2_mean, na.rm = TRUE) ) %>%
+  filter(distance > -1500) %>%
+  ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) +
+  geom_line(aes(group = pop), lwd = 1, position = "fill") +
+  geom_area(position = "fill",alpha = 0.5) +
+  #geom_point(aes(distance, din), col = 1, pch = 1, size = 3, show.legend = FALSE) + 
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  scale_fill_manual(values = pop_cols, name = "population") +
+  scale_color_manual(values = pop_cols, guide = "none") +
+  scale_y_continuous(name = "contribution") +
+  facet_wrap(. ~ cruise) +
+  theme_bw(base_size = 20) +
+  theme(legend.position = "top") +
+  labs(y = "biomass (μgC/L)", x = "distance (km)")
 
-png(paste0("figures/Figure_2.png"), width = 2500, height = 1600, res = 200)
-print(fig2)
+png(paste0("figures/Figure_2.png"), width = 2500, height = 3200, res = 200)
+ggpubr::ggarrange(fig2a, fig2b, nrow = 2, common.legend = TRUE)
 dev.off()
+
 
 
 ### carbon quota
 
 fig3 <- data_figures %>%
   filter(distance > -1500) %>%
-  ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) + 
-  geom_line(aes(group = pop), lwd = 1) + 
+  ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) +
+  geom_line(aes(group = pop), lwd = 1) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = 0.02, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_color_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
+  scale_color_manual(values = pop_cols, name = "population") +
   scale_y_continuous(trans='log10') +
   facet_wrap(. ~ cruise) +
   theme_bw(base_size = 20) +
@@ -447,16 +473,13 @@ dev.off()
 fig4 <- data_figures %>%
   filter(distance > -1500) %>%
   filter(!is.na(daily_growth_mean)) %>%
-  ggplot(aes(distance, daily_growth_mean / qc_mean,  col = pop, fill = pop)) + 
+  ggplot(aes(distance, daily_growth_mean,  col = pop, fill = pop)) +
   geom_line(aes(group = pop), lwd = 1) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_color_manual(values = pop_cols, name = "population", labels = c("prochlorococus", "synechococcus", "picoeukaryotes")) +
+  scale_color_manual(values = pop_cols, name = "population") +
   facet_wrap(. ~ cruise) +
   theme_bw(base_size = 20) +
   labs(y = "growth rate", x = "distance (km)")
-
-
-### save plot
 
 png(paste0("figures/","Figure_4.png"), width = 2500, height = 2000, res = 200)
 print(fig4)
@@ -464,11 +487,11 @@ dev.off()
 
 ### correlation plot
 corr_data <- data_figures %>% 
-  select(pop, c_per_uL_mean, qc_mean, daily_growth_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  select(pop, c_per_uL_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
   na.omit() %>% 
-  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, qc_mean, daily_growth_mean))
+  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean))
 
-colnames(corr_data) <- c("nitrate", "salinity", "temperature", "daily par", "biomass pico", "biomass pro", "biomass syn", "size pico", "size pro", "size syn", "growth pico", "growth pro", "growth syn")
+colnames(corr_data) <- c("nitrate", "salinity", "temperature", "daily par",colnames(corr_data)[5:8] )
 
 cor_all <- cor(corr_data, use = "complete.obs")
 cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
