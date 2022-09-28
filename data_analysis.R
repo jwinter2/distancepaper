@@ -8,10 +8,10 @@ library(dplyr)
 library(corrplot)
 
 # Francois
-setwd("~/Documents/Codes/distancepaper") # path to github repository
+#setwd("~/Documents/Codes/distancepaper") # path to github repository
 
 # Jordan
-#setwd("~/Downloads/distancepaper/")
+setwd("~/Downloads/distancepaper/")
 
 #-----------------
 # For plotting map
@@ -52,6 +52,7 @@ geo <- list(
 # Environmental data
 #-------------------
 env <- read_csv("data/EnvironmentalData.csv") %>% arrange(date)
+env$date <- as.POSIXct(env$date, format = "%m/%d/%y %H:%M", tz = "GMT")
 
 ### Clean-up data
 # salinity and Temperature (due to freshwater contamination in ships' seawater supply)
@@ -450,48 +451,13 @@ ggpubr::ggarrange(fig2a, fig2b, nrow = 2, common.legend = TRUE)
 dev.off()
 
 
-
-### carbon quota
-
-fig3 <- data_figures %>%
-  filter(distance > -1500) %>%
-  ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) +
-  geom_line(aes(group = pop), lwd = 1) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = 0.02, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_color_manual(values = pop_cols, name = "population") +
-  scale_y_continuous(trans='log10') +
-  facet_wrap(. ~ cruise) +
-  theme_bw(base_size = 20) +
-  labs(y = "carbon quota (pg C/cell)", x = "distance (km)")
-
-png(paste0("figures/","Figure_3.png"), width = 2500, height = 2000, res = 200)
-print(fig3)
-dev.off()
-
-### growth rate
-
-fig4 <- data_figures %>%
-  filter(distance > -1500) %>%
-  filter(!is.na(daily_growth_mean)) %>%
-  ggplot(aes(distance, daily_growth_mean,  col = pop, fill = pop)) +
-  geom_line(aes(group = pop), lwd = 1) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_color_manual(values = pop_cols, name = "population") +
-  facet_wrap(. ~ cruise) +
-  theme_bw(base_size = 20) +
-  labs(y = "growth rate", x = "distance (km)")
-
-png(paste0("figures/","Figure_4.png"), width = 2500, height = 2000, res = 200)
-print(fig4)
-dev.off()
-
 ### correlation plot
 corr_data <- data_figures %>% 
-  select(pop, c_per_uL_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
-  na.omit() %>% 
+  select(pop, c_per_uL_mean, MLD_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  #na.omit() %>% 
   pivot_wider(names_from = pop, values_from = c(c_per_uL_mean))
 
-colnames(corr_data) <- c("nitrate", "salinity", "temperature", "daily par",colnames(corr_data)[5:8] )
+colnames(corr_data) <- c("mixed layer depth","nitrate", "salinity", "temperature", "daily par",colnames(corr_data)[6:9] )
 
 cor_all <- cor(corr_data, use = "complete.obs")
 cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
@@ -592,4 +558,38 @@ ggpubr::ggarrange(temp, par, din, nrow = 1, common.legend = TRUE)
 dev.off()
 
 
+
+### carbon quota
+
+fig3 <- data_figures %>%
+  filter(distance > -1500) %>%
+  ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) +
+  geom_line(aes(group = pop), lwd = 1) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = 0.02, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  scale_color_manual(values = pop_cols, name = "population") +
+  scale_y_continuous(trans='log10') +
+  facet_wrap(. ~ cruise) +
+  theme_bw(base_size = 20) +
+  labs(y = "carbon quota (pg C/cell)", x = "distance (km)")
+
+png(paste0("figures/","Figure_3.png"), width = 2500, height = 2000, res = 200)
+print(fig3)
+dev.off()
+
+### growth rate
+
+fig4 <- data_figures %>%
+  filter(distance > -1500) %>%
+  filter(!is.na(daily_growth_mean)) %>%
+  ggplot(aes(distance, daily_growth_mean,  col = pop, fill = pop)) +
+  geom_line(aes(group = pop), lwd = 1) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  scale_color_manual(values = pop_cols, name = "population") +
+  facet_wrap(. ~ cruise) +
+  theme_bw(base_size = 20) +
+  labs(y = "growth rate", x = "distance (km)")
+
+png(paste0("figures/","Figure_4.png"), width = 2500, height = 2000, res = 200)
+print(fig4)
+dev.off()
 
