@@ -593,7 +593,7 @@ png(paste0("figures/","Figure_4.png"), width = 2500, height = 2000, res = 200)
 print(fig4)
 dev.off()
 
-### growth rate
+### MLD
 data_figures$Month <- lubridate::month(data_figures$date_mean)
 
 fig_mld <- data_figures %>%
@@ -608,5 +608,20 @@ fig_mld <- data_figures %>%
 
 png(paste0("figures/","mld_seasonally.png"), width = 2500, height = 2000, res = 200)
 print(fig_mld)
+dev.off()
+
+### MLD and NO3
+data_figures$MLD_NO3 <- data_figures$MLD_mean * data_figures$NO3_NO2_mean
+
+fig_mld_no3 <- data_figures %>%
+  ggplot(aes(distance, MLD_NO3)) +
+  geom_point(aes(group = pop), size = 2) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  facet_wrap(. ~ cruise) +
+  theme_bw(base_size = 20) +
+  labs(y = "MLD * DIN", x = "distance (km)")
+
+png(paste0("figures/","mld_no3.png"), width = 2500, height = 2000, res = 200)
+print(fig_mld_no3)
 dev.off()
 
