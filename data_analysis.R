@@ -593,3 +593,20 @@ png(paste0("figures/","Figure_4.png"), width = 2500, height = 2000, res = 200)
 print(fig4)
 dev.off()
 
+### growth rate
+data_figures$Month <- lubridate::month(data_figures$date_mean)
+
+fig_mld <- data_figures %>%
+  ggplot(aes(distance, MLD_mean,  col = as.factor(Month))) +
+  geom_point(aes(group = pop), size = 2) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  facet_wrap(. ~ cruise) +
+  theme_bw(base_size = 20) +
+  labs(y = "mixed layer depth (m)", x = "distance (km)") +
+  scale_y_reverse() +
+  scale_color_discrete()
+
+png(paste0("figures/","mld_seasonally.png"), width = 2500, height = 2000, res = 200)
+print(fig_mld)
+dev.off()
+
