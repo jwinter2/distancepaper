@@ -453,11 +453,15 @@ dev.off()
 
 ### correlation plot
 corr_data <- data_figures %>% 
-  select(pop, c_per_uL_mean, MLD_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  select(pop, c_per_uL_mean, diam_mean, MLD_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
   #na.omit() %>% 
-  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean))
+  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean))
 
-colnames(corr_data) <- c("mixed layer depth","nitrate", "salinity", "temperature", "daily par",colnames(corr_data)[6:9] )
+colnames(corr_data) <- c("mixed layer depth","nitrate", "salinity", "temperature", "daily par",
+                         "biomass nanoeukaryotes", "biomass picoeukaryotes",
+                         "biomass Prochlorococcus", "biomass Synechococcus",
+                         "diameter nanoeukaryotes", "diameter picoeukaryotes",
+                         "diameter Prochlorococcus", "diameter Synechococcus")
 
 cor_all <- cor(corr_data, use = "complete.obs")
 cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
