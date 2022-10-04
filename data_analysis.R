@@ -401,11 +401,12 @@ fig1a <- meta_gyre_d %>%
 
 # plot environmental variables
 fig1b <- data_figures %>%
-  rename(NO3_NO2 = NO3_NO2_mean, temp = temp_mean, salinity = salinity_mean, par = par_mean, MLD = MLD_mean) %>%
-  pivot_longer(cols = c(NO3_NO2, temp, salinity, par, MLD), names_to = "variable") %>%
+  rename(NO3_NO2 = NO3_NO2_mean, temp = temp_mean, salinity = salinity_mean, MLD = MLD_mean) %>%
+  pivot_longer(cols = c(NO3_NO2, temp, salinity, MLD), names_to = "variable") %>%
+  filter(is.na(value) == F) %>%
   filter(distance > -1500) %>%
   ggplot() +
-  geom_point(aes(distance, value, color = cruise), size=2, show.legend = T) +
+  geom_line(aes(distance, value, color = cruise), size = 2, show.legend = T, na.rm = T) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
   theme_bw() +
   scale_color_manual(values = cividis(9)) +
