@@ -387,7 +387,7 @@ g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "sca
 #----------------
 
 # plot cruise track
-fig1 <- meta_gyre_d %>%
+fig1a <- meta_gyre_d %>%
   filter(distance > -1500) %>%
   ggplot() +
   geom_point(aes(lon - 360, lat, color = gyre), size=2, alpha = 0.7, show.legend = T) +
@@ -399,9 +399,24 @@ fig1 <- meta_gyre_d %>%
   xlab("Longitude (ºW)") +
   ylab("Latitude (ºN)")
 
+# plot environmental variables
+fig1b <- data_figures %>%
+  rename(NO3_NO2 = NO3_NO2_mean, temp = temp_mean, salinity = salinity_mean, par = par_mean, MLD = MLD_mean) %>%
+  pivot_longer(cols = c(NO3_NO2, temp, salinity, par, MLD), names_to = "variable") %>%
+  filter(distance > -1500) %>%
+  ggplot() +
+  geom_point(aes(distance, value, color = cruise), size=2, show.legend = T) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  theme_bw() +
+  scale_color_manual(values = cividis(9)) +
+  theme(text = element_text(size = 20)) + 
+  xlab("distance (m)") +
+  ylab("concentration") +
+  facet_wrap(. ~ variable, scales = "free_y")
+
 
 png(paste0("figures/Figure_1.png"),width=12, height=10, unit="in", res=200)
-print(fig1)
+ggpubr::ggarrange(fig1a, fig1b, nrow = 2)
 dev.off()
 
 ### plot biomass over distance per cruise
