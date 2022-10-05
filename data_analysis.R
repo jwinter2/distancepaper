@@ -402,17 +402,20 @@ fig1a <- meta_gyre_d %>%
 # plot environmental variables
 fig1b <- data_figures %>%
   rename(NO3_NO2 = NO3_NO2_mean, temp = temp_mean, salinity = salinity_mean, MLD = MLD_mean) %>%
+  distinct(NO3_NO2, temp, salinity, MLD, distance, .keep_all = T) %>%
   pivot_longer(cols = c(NO3_NO2, temp, salinity, MLD), names_to = "variable") %>%
+  group_by(variable, cruise) %>%
+  mutate(change_value= value/max(value, na.rm=T)) %>%
   filter(is.na(value) == F) %>%
   filter(distance > -1500) %>%
   ggplot() +
-  geom_line(aes(distance, value, color = cruise), size = 2, show.legend = T, na.rm = T) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  geom_line(aes(distance, change_value, color = cruise), size = 2, show.legend = T, na.rm = T) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
   theme_bw() +
   scale_color_manual(values = cividis(9)) +
   theme(text = element_text(size = 20)) + 
   xlab("distance (m)") +
-  ylab("concentration") +
+  ylab("change in concentration") +
   facet_wrap(. ~ variable, scales = "free_y")
 
 
