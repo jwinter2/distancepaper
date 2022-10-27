@@ -118,7 +118,8 @@ meta <- meta %>% mutate(cruise = case_when(cruise == "Gradients 1" ~ "KOK1606",
                                    cruise == "Gradients 4" ~ "TN397",
                                    TRUE ~ cruise)) %>%
   filter(cruise != "SR1917") %>% # cruise outside of region of interest
-  filter(cruise != "TN271") # cruise outside of region of interest
+  filter(cruise != "TN271") %>% # cruise outside of region of interest
+  filter(cruise != "KM1502") # cruise with little variation
 
 ### plot cruise track
 # plot_geo(meta, lat = ~ lat, lon = ~ lon, color = ~ cruise, mode = "scatter") %>%  layout(geo = geo)
