@@ -398,7 +398,15 @@ fig1a <- meta_gyre_d %>%
   scale_color_manual(values = viridis(3)) +
   theme(text = element_text(size = 20)) + 
   xlab("Longitude (ºW)") +
-  ylab("Latitude (ºN)")
+  ylab("Latitude (ºN)") +
+  annotate("text", x=-140, y=50, label="KM1713") +
+  annotate("text", x=-142, y=42, label="KM1712") +
+  annotate("text", x=-166, y=45, label="KOK1606") +
+  annotate("text", x=-166, y=40, label="MGL1704") +
+  annotate("text", x=-166, y=35, label="KM1906") +
+  annotate("text", x=-160, y=-1, label="KM1923") +
+  annotate("text", x=-132, y=10, label="TN397") +
+  annotate("text", x=-130, y=35, label="TN398")
 
 # plot environmental variables
 fig1b <- data_figures %>%
