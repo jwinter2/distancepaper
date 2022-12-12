@@ -391,7 +391,7 @@ g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "sca
 fig1a <- meta_gyre_d %>%
   filter(distance > -1500) %>%
   ggplot() +
-  geom_point(aes(lon - 360, lat, color = gyre), size=2, alpha = 0.7, show.legend = T) +
+  geom_point(aes(lon - 360, lat, color = gyre), size=2, alpha = 0.7, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
   theme_bw() +
@@ -412,30 +412,34 @@ fig1a <- meta_gyre_d %>%
 getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
 
 fig1b <- data_figures %>%
-  rename(NO3_NO2 = NO3_NO2_mean, temp = temp_mean, salinity = salinity_mean, MLD = MLD_mean) %>%
-  distinct(NO3_NO2, temp, salinity, MLD, distance, .keep_all = T) %>%
-  pivot_longer(cols = c(NO3_NO2, temp, salinity, MLD), names_to = "variable") %>%
-  group_by(variable, cruise) %>%
-  mutate(change_value= value/max(value, na.rm=T)) %>%
   filter(distance > -1500) %>%
-  filter(!is.na(value)) %>%
-  filter(variable == "NO3_NO2" | 
-         variable == "temp") %>%
-  ggplot(aes(distance, value, color = cruise)) +
-  geom_point(size = 2,  show.legend = T) +
-  # geom_line(data = data_fig1b %>% filter(distance  < 0)) +
-  # geom_line(data = data_fig1b %>% filter(distance  > 100)) +
+  ggplot(aes(distance, NO3_NO2_mean, color = cruise)) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
+  geom_point(size = 2,  show.legend = T) +
+  geom_line(aes(col = cruise), lwd = 2) +
+  geom_linerange(aes(ymin = NO3_NO2_mean - NO3_NO2_sd, ymax = NO3_NO2_mean + NO3_NO2_sd), lwd = 0.5) +
   theme_bw() +
   scale_color_manual(values = getPalette(8)) +
   theme(text = element_text(size = 20)) + 
-  xlab("distance (m)") +
-  ylab("change in concentration") +
-  facet_wrap(. ~ variable, scales = "free_y")
+  xlab("distance (km)") +
+  ylab("DIN (µmol/L)") 
+
+fig1c <- data_figures %>%
+  filter(distance > -1500) %>%
+  ggplot(aes(distance, temp_mean, color = cruise)) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
+  geom_point(size = 2,  show.legend = T) +
+  geom_line(aes(col = cruise), lwd = 2) +
+  geom_linerange(aes(ymin = temp_mean - temp_sd, ymax = temp_mean + temp_sd), lwd = 0.5) +
+  theme_bw() +
+  scale_color_manual(values = getPalette(8)) +
+  theme(text = element_text(size = 20)) + 
+  xlab("distance (km)") +
+  ylab("temperature (ºC)") 
 
 
-png(paste0("figures/Figure_1.png"),width=12, height=10, unit="in", res=200)
-ggpubr::ggarrange(fig1a, fig1b, nrow = 2)
+png(paste0("figures/Figure_1.png"), width=15, height=6, unit="in", res=200)
+ggpubr::ggarrange(fig1a, fig1b, fig1c, ncol = 3, nrow = 1, common.legend = TRUE)
 dev.off()
 
 ### plot biomass over distance per cruise
