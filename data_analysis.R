@@ -421,7 +421,7 @@ fig1b <- data_figures %>%
   theme_bw() +
   scale_color_manual(values = getPalette(8)) +
   theme(text = element_text(size = 20)) + 
-  xlab("distance (km)") +
+  xlab("Distance (km)") +
   ylab("DIN (µmol/L)") 
 
 fig1c <- data_figures %>%
@@ -434,8 +434,8 @@ fig1c <- data_figures %>%
   theme_bw() +
   scale_color_manual(values = getPalette(8)) +
   theme(text = element_text(size = 20)) + 
-  xlab("distance (km)") +
-  ylab("temperature (ºC)") 
+  xlab("Distance (km)") +
+  ylab("Temperature (ºC)") 
 
 
 png(paste0("figures/Figure_1.png"), width=15, height=6, unit="in", res=200)
