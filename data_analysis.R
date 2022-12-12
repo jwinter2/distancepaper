@@ -409,19 +409,25 @@ fig1a <- meta_gyre_d %>%
   annotate("text", x=-130, y=35, label="TN398")
 
 # plot environmental variables
+getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
+
 fig1b <- data_figures %>%
   rename(NO3_NO2 = NO3_NO2_mean, temp = temp_mean, salinity = salinity_mean, MLD = MLD_mean) %>%
   distinct(NO3_NO2, temp, salinity, MLD, distance, .keep_all = T) %>%
   pivot_longer(cols = c(NO3_NO2, temp, salinity, MLD), names_to = "variable") %>%
   group_by(variable, cruise) %>%
   mutate(change_value= value/max(value, na.rm=T)) %>%
-  filter(is.na(value) == F) %>%
   filter(distance > -1500) %>%
-  ggplot() +
-  geom_line(aes(distance, change_value, color = cruise), size = 2, show.legend = T, na.rm = T) +
+  filter(!is.na(value)) %>%
+  filter(variable == "NO3_NO2" | 
+         variable == "temp") %>%
+  ggplot(aes(distance, value, color = cruise)) +
+  geom_point(size = 2,  show.legend = T) +
+  # geom_line(data = data_fig1b %>% filter(distance  < 0)) +
+  # geom_line(data = data_fig1b %>% filter(distance  > 100)) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
   theme_bw() +
-  scale_color_manual(values = cividis(9)) +
+  scale_color_manual(values = getPalette(8)) +
   theme(text = element_text(size = 20)) + 
   xlab("distance (m)") +
   ylab("change in concentration") +
