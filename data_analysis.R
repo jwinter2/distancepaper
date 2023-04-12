@@ -11,7 +11,7 @@ library(corrplot)
 #setwd("~/Documents/Codes/distancepaper") # path to github repository
 
 # Jordan
-setwd("~/Downloads/distancepaper/")
+setwd("~/github/distancepaper/")
 
 #-----------------
 # For plotting map
@@ -488,23 +488,41 @@ png(paste0("figures/Figure_2.png"), width = 2500, height = 3200, res = 200)
 ggpubr::ggarrange(fig2a, fig2b, nrow = 2, common.legend = TRUE)
 dev.off()
 
+### carbon quota
+
+fig3 <- data_figures %>%
+  filter(distance > -1500) %>%
+  ggplot(aes(distance, qc_mean,  col = cruise, fill = cruise)) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.05, inherit.aes = FALSE) +
+  geom_line(aes(group = cruise), lwd = 1) +
+  scale_color_manual(values = getPalette(8)) +
+  facet_wrap(. ~ pop, scales="free_y") +
+  theme_bw(base_size = 20) +
+  labs(y = "Carbon quota (pg C/cell)", x = "Distance (km)")
+
+png(paste0("figures/","Figure_3.png"), width = 2500, height = 2000, res = 200)
+print(fig3)
+dev.off()
+
 
 ### correlation plot
 corr_data <- data_figures %>% 
-  select(pop, c_per_uL_mean, diam_mean, MLD_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  select(pop, c_per_uL_mean, diam_mean, qc_mean, MLD_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
   #na.omit() %>% 
-  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean))
+  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, qc_mean))
 
 colnames(corr_data) <- c("mixed layer depth","nitrate", "salinity", "temperature", "daily par",
-                         "biomass nanoeukaryotes", "biomass picoeukaryotes",
                          "biomass Prochlorococcus", "biomass Synechococcus",
+                         "biomass nanoeukaryotes", "biomass picoeukaryotes",
+                         "diameter Prochlorococcus", "diameter Synechococcus",
                          "diameter nanoeukaryotes", "diameter picoeukaryotes",
-                         "diameter Prochlorococcus", "diameter Synechococcus")
+                         "carbon quota Prochlorococcus", "carbon quota Synechococcus",
+                         "carbon quota nanoeukaryotes", "carbon quota picoeukaryotes")
 
 cor_all <- cor(corr_data, use = "complete.obs")
 cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
 
-png(paste0("figures/","Figure_5.png"), width = 2500, height = 1600, res = 200)
+png(paste0("figures/","Figure_4.png"), width = 2500, height = 1600, res = 200)
 fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank",
                     type = "lower", method = "color", addgrid.col = F, tl.col = "black",
                     col = colorRampPalette(c("blue", "grey90", "red"))(200))
@@ -524,6 +542,18 @@ dev.off()
 #------------------------
 # d. Supplemental Figures 
 #------------------------
+# alternate form of fig 3
+fig3 <- data_figures %>%
+  filter(distance > -1500) %>%
+  ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) +
+  geom_line(aes(group = pop), lwd = 1) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = 0.02, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  scale_color_manual(values = pop_cols, name = "population") +
+  scale_y_continuous(trans='log10') +
+  facet_wrap(. ~ cruise) +
+  theme_bw(base_size = 20) +
+  labs(y = "carbon quota (pg C/cell)", x = "distance (km)")
+
 # nutrients
 data_nutr <- data_figure[, c("cruise", "pop", "distance", "NO3_NO2_mean", "PO4_mean")]
 data_nutr <- data_nutr %>%
@@ -599,24 +629,6 @@ png(paste0("figures/Figure_3.png"), width = 3500, height = 1600, res = 200)
 ggpubr::ggarrange(temp, par, din, nrow = 1, common.legend = TRUE)
 dev.off()
 
-
-
-### carbon quota
-
-fig3 <- data_figures %>%
-  filter(distance > -1500) %>%
-  ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) +
-  geom_line(aes(group = pop), lwd = 1) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = 0.02, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_color_manual(values = pop_cols, name = "population") +
-  scale_y_continuous(trans='log10') +
-  facet_wrap(. ~ cruise) +
-  theme_bw(base_size = 20) +
-  labs(y = "carbon quota (pg C/cell)", x = "distance (km)")
-
-png(paste0("figures/","Figure_3.png"), width = 2500, height = 2000, res = 200)
-print(fig3)
-dev.off()
 
 ### growth rate
 
