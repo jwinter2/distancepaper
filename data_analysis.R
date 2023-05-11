@@ -492,13 +492,14 @@ dev.off()
 
 fig3 <- data_figures %>%
   filter(distance > -1500) %>%
-  ggplot(aes(distance, qc_mean,  col = cruise, fill = cruise)) +
+  drop_na(daily_growth_mean) %>%
+  ggplot(aes(distance, daily_growth_mean,  col = cruise, fill = cruise)) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.05, inherit.aes = FALSE) +
-  geom_line(aes(group = cruise), lwd = 1) +
+  geom_line(aes(group = cruise), lwd=1) +
   scale_color_manual(values = getPalette(8)) +
   facet_wrap(. ~ pop, scales="free_y") +
   theme_bw(base_size = 20) +
-  labs(y = "Carbon quota (pg C/cell)", x = "Distance (km)")
+  labs(y = "Daily growth rate", x = "Distance (km)")
 
 png(paste0("figures/","Figure_3.png"), width = 2500, height = 2000, res = 200)
 print(fig3)
