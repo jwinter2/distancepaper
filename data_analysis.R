@@ -508,17 +508,17 @@ dev.off()
 
 ### correlation plot
 corr_data <- data_figures %>% 
-  select(pop, c_per_uL_mean, diam_mean, qc_mean, MLD_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, MLD_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
   #na.omit() %>% 
-  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, qc_mean))
+  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
 
 colnames(corr_data) <- c("mixed layer depth","nitrate", "salinity", "temperature", "daily par",
                          "biomass Prochlorococcus", "biomass Synechococcus",
                          "biomass nanoeukaryotes", "biomass picoeukaryotes",
                          "diameter Prochlorococcus", "diameter Synechococcus",
                          "diameter nanoeukaryotes", "diameter picoeukaryotes",
-                         "carbon quota Prochlorococcus", "carbon quota Synechococcus",
-                         "carbon quota nanoeukaryotes", "carbon quota picoeukaryotes")
+                         "growth rate Prochlorococcus", "growth rate Synechococcus",
+                         "growth rate nanoeukaryotes", "growth rate picoeukaryotes")
 
 cor_all <- cor(corr_data, use = "complete.obs")
 cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
