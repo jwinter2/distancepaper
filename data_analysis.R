@@ -464,19 +464,30 @@ pop_cols <- c("Prochlorococcus" = rocket(7)[6], "Synechococcus" = rocket(7)[4], 
 data_figures$pop <- factor(data_figures$pop, levels = rev(c(pop_names[3], pop_names[4], pop_names[2], pop_names[1])))
 # scale nutrient to biomass data
 coeff <- 4
+# group by direction
+data_figures$direction <- NA
+ind_n <- which(data_figures$cruise == "KOK1606" | data_figures$cruise == "MGL1704" |
+                 data_figures$cruise == "KM1906" | data_figures$cruise== "KM1712" |
+                 data_figures$cruise == "KM1713")
+data_figures$direction[ind_n] <- "north"
+ind_e <- which(data_figures$cruise == "TN398" | data_figures$cruise == "TN397a" |
+                 data_figures$cruise == "TN397b")
+data_figures$direction[ind_e] <- "east"
+ind_s <- which(data_figures$cruise == "TN397c" | data_figures$cruise == "KM1923")
+data_figures$direction[ind_s] <- "south"
 
-fig2a <- data_figures %>%
+fig2aa <- data_figures %>%
   filter(distance > -1500) %>%
     ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) + 
     geom_line(aes(group = pop), lwd = 1, position = "stack") + 
     geom_area(position = "stack",alpha = 0.5) +
     geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
-    geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+    #geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
     scale_fill_manual(values = pop_cols, name = "population") +
     scale_color_manual(values = pop_cols, guide = "none") +
     scale_y_continuous(name = "biomass (μgC/L)",
       sec.axis = sec_axis( trans=~./coeff, name="DIN (µmol/L)")) +
-    facet_wrap(. ~ cruise) +
+    facet_wrap(factor(direction, levels =c("north", "east", "south")) ~ factor(cruise, levels =c("KOK1606", "MGL1704", "KM1906", "KM1712", "KM1713", "TN398", "TN397a", "TN397b", "TN397c", "KM1923")), nrow = 3) +
     theme_bw(base_size = 20) +
     labs(y = "biomass (μgC/L)", x = "distance (km)")
          
@@ -504,12 +515,12 @@ dev.off()
 ### carbon quota
 
 fig3 <- data_figures %>%
-  filter(distance > -1500) %>%
+  filter(distance > -1500 & pop == "Prochlorococcus" | distance > -1500 & pop == "Synechococcus") %>%
   drop_na(daily_growth_mean) %>%
   ggplot(aes(distance, daily_growth_mean,  col = cruise, fill = cruise)) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.05, inherit.aes = FALSE) +
   geom_line(aes(group = cruise), lwd=1) +
-  scale_color_manual(values = getPalette(8)) +
+  scale_color_manual(values = getPalette(10)) +
   facet_wrap(. ~ pop, scales="free_y") +
   theme_bw(base_size = 20) +
   labs(y = "Daily growth rate", x = "Distance (km)")
