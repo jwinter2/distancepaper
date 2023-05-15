@@ -144,6 +144,15 @@ max_distance <- 14 / 0.53996 # km in 1 hour
 
 meta_distance <- tibble()
 meta <- subset(meta, is.na(cruise) == F)
+
+## turn TN397 into 3 separate cruise tracks
+tn397a <- which(meta$cruise == "TN397" & meta$lat > 17 & meta$lon > 215)
+tn397b <- which(meta$cruise == "TN397" & meta$lat < 17 & meta$lon > 219.99)
+tn397c <- which(meta$cruise == "TN397" & meta$lon <= 219.99)
+meta$cruise[tn397a] <- "TN397a"
+meta$cruise[tn397b] <- "TN397b"
+meta$cruise[tn397c] <- "TN397c"
+
 for(c in unique(meta$cruise)) {
   meta_c <- meta %>% filter(cruise == c)
   meta_c <- meta_c %>% 
@@ -169,6 +178,7 @@ meta_distance_binned <- meta_distance %>%
       labels = seq(d[1],d[2], by = resolution)[-1])) %>%
   dplyr::summarise_all(function(x) mean(x, na.rm = TRUE)) %>%
   mutate(distance = as.numeric(as.character(distance)))
+
 
 ### plot salinity
 # plot_geo(meta_distance, lat = ~ lat, lon = ~ lon, color = ~ salinity, mode = "scatter", colors = "Spectral") %>%  layout(geo = geo)
@@ -389,7 +399,7 @@ g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "sca
 
 # plot cruise track
 fig1a <- meta_gyre_d %>%
-  filter(distance > -1500) %>%
+  filter(distance > -2000) %>%
   ggplot() +
   geom_point(aes(lon - 360, lat, color = gyre), size=2, alpha = 0.7, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
@@ -405,7 +415,9 @@ fig1a <- meta_gyre_d %>%
   annotate("text", x=-166, y=40, label="MGL1704") +
   annotate("text", x=-166, y=35, label="KM1906") +
   annotate("text", x=-160, y=-1, label="KM1923") +
-  annotate("text", x=-132, y=10, label="TN397") +
+  annotate("text", x=-122, y=22, label="TN397a") +
+  annotate("text", x=-133, y=10, label="TN397b") +
+  annotate("text", x=-146, y=-2, label="TN397c") +
   annotate("text", x=-130, y=35, label="TN398")
 
 # plot environmental variables
@@ -419,7 +431,7 @@ fig1b <- data_figures %>%
   geom_line(aes(col = cruise), lwd = 2) +
   geom_linerange(aes(ymin = NO3_NO2_mean - NO3_NO2_sd, ymax = NO3_NO2_mean + NO3_NO2_sd), lwd = 0.5) +
   theme_bw() +
-  scale_color_manual(values = getPalette(8)) +
+  scale_color_manual(values = getPalette(10)) +
   theme(text = element_text(size = 20)) + 
   xlab("Distance (km)") +
   ylab("DIN (µmol/L)") 
@@ -432,14 +444,15 @@ fig1c <- data_figures %>%
   geom_line(aes(col = cruise), lwd = 2) +
   geom_linerange(aes(ymin = temp_mean - temp_sd, ymax = temp_mean + temp_sd), lwd = 0.5) +
   theme_bw() +
-  scale_color_manual(values = getPalette(8)) +
+  scale_color_manual(values = getPalette(10)) +
   theme(text = element_text(size = 20)) + 
   xlab("Distance (km)") +
   ylab("Temperature (ºC)") 
 
 
 png(paste0("figures/Figure_1.png"), width=15, height=6, unit="in", res=200)
-ggpubr::ggarrange(fig1a, fig1b, fig1c, ncol = 3, nrow = 1, common.legend = TRUE)
+ggpubr::ggarrange(fig1a, fig1b, fig1c, ncol = 3, nrow = 1, common.legend = TRUE) +
+  theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
 dev.off()
 
 ### plot biomass over distance per cruise
