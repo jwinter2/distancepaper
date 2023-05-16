@@ -553,11 +553,22 @@ colnames(corr_data) <- c("mixed layer depth","nitrate", "salinity", "temperature
                          "growth rate Prochlorococcus", "growth rate Synechococcus",
                          "growth rate nanoeukaryotes", "growth rate picoeukaryotes")
 
+corr_data <- corr_data[,c("mixed layer depth","nitrate", "salinity", "temperature", "daily par",
+                         "biomass Prochlorococcus", "biomass Synechococcus",
+                         "biomass nanoeukaryotes", "biomass picoeukaryotes",
+                         "diameter Prochlorococcus", "diameter Synechococcus",
+                         "growth rate Prochlorococcus", "growth rate Synechococcus")]
+
 cor_all <- cor(corr_data, use = "complete.obs")
 cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
 
+# adjust for multiple comparisons
+pAdj <- p.adjust(c(cor_all_p[[1]]), method = "BH")
+resAdj <- matrix(pAdj, ncol = dim(cor_all_p[[1]])[1])
+dimnames(resAdj) <- dimnames(cor_all_p$p)
+
 png(paste0("figures/","Figure_4.png"), width = 2500, height = 1600, res = 200)
-fig_cor <- corrplot(cor_all, p.mat = cor_all_p$p, sig.level = 0.01, insig = "blank",
+fig_cor <- corrplot(cor_all, p.mat = resAdj, sig.level = 0.01, insig = "blank",
                     type = "lower", method = "color", addgrid.col = F, tl.col = "black",
                     col = colorRampPalette(c("blue", "grey90", "red"))(200))
 dev.off()
