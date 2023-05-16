@@ -147,8 +147,8 @@ meta <- subset(meta, is.na(cruise) == F)
 
 ## turn TN397 into 3 separate cruise tracks
 tn397a <- which(meta$cruise == "TN397" & meta$lat > 17 & meta$lon > 215)
-tn397b <- which(meta$cruise == "TN397" & meta$lat < 17 & meta$lon > 219.99)
-tn397c <- which(meta$cruise == "TN397" & meta$lon <= 219.99)
+tn397b <- which(meta$cruise == "TN397" & meta$lat < 17 & meta$lon > 219.5)
+tn397c <- which(meta$cruise == "TN397" & meta$lon <= 219.5)
 meta$cruise[tn397a] <- "TN397a"
 meta$cruise[tn397b] <- "TN397b"
 meta$cruise[tn397c] <- "TN397c"
@@ -313,10 +313,6 @@ meta_gyre_d  <- meta_gyre_d %>%
 ### remove data far outside the gyre
 meta_gyre_d  <- meta_gyre_d %>% filter(distance < 2000)
 
-## fix area in the transition zone for TN397 that appears to be inside the gyre
-id_tn397 <- which(meta_gyre_d$lat > 5 & meta_gyre_d$lat < 6 & meta_gyre_d$lon > 220)
-meta_gyre_d$gyre[id_tn397] <- "transition"
-
 
 #---------------------------
 # Calculate carbon growth
@@ -397,15 +393,17 @@ g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "sca
 # c. Main Figures
 #----------------
 
+getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
+
 # plot cruise track
 fig1a <- meta_gyre_d %>%
   filter(distance > -2000) %>%
   ggplot() +
-  geom_point(aes(lon - 360, lat, color = gyre), size=2, alpha = 0.7, show.legend = F) +
+  geom_point(aes(lon - 360, lat, color = cruise), size=2, alpha = 0.7, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
   theme_bw() +
-  scale_color_manual(values = viridis(3)) +
+  scale_color_manual(values = getPalette(10)) +
   theme(text = element_text(size = 20)) + 
   xlab("Longitude (ºW)") +
   ylab("Latitude (ºN)") +
@@ -420,10 +418,21 @@ fig1a <- meta_gyre_d %>%
   annotate("text", x=-146, y=-2, label="TN397c") +
   annotate("text", x=-130, y=35, label="TN398")
 
-# plot environmental variables
-getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
+# plot gyre boundaries
+fig1b <- meta_gyre_d %>%
+  filter(distance > -2000) %>%
+  ggplot() +
+  geom_point(aes(lon - 360, lat, color = gyre), size=2, alpha = 0.7, show.legend = F) +
+  coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
+  borders("world", colour = "black", fill = "gray80") +
+  theme_bw() +
+  scale_color_manual(values = viridis(3)) +
+  theme(text = element_text(size = 20)) + 
+  xlab("Longitude (ºW)") +
+  ylab("Latitude (ºN)")
 
-fig1b <- data_figures %>%
+# plot environmental variables
+fig1c <- data_figures %>%
   filter(distance > -1500) %>%
   ggplot(aes(distance, NO3_NO2_mean, color = cruise)) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
@@ -436,7 +445,7 @@ fig1b <- data_figures %>%
   xlab("Distance (km)") +
   ylab("DIN (µmol/L)") 
 
-fig1c <- data_figures %>%
+fig1d <- data_figures %>%
   filter(distance > -1500) %>%
   ggplot(aes(distance, temp_mean, color = cruise)) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
@@ -450,8 +459,8 @@ fig1c <- data_figures %>%
   ylab("Temperature (ºC)") 
 
 
-png(paste0("figures/Figure_1.png"), width=15, height=6, unit="in", res=200)
-ggpubr::ggarrange(fig1a, fig1b, fig1c, ncol = 3, nrow = 1, common.legend = TRUE) +
+png(paste0("figures/Figure_1.png"), width=12, height=12, unit="in", res=200)
+ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1d, ncol = 2, nrow = 2, common.legend = TRUE) +
   theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
 dev.off()
 
