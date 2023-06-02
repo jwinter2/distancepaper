@@ -380,7 +380,7 @@ meta_gyre_d  <- meta_gyre_d %>% filter(distance < 2000)
 pop_cols <- c("Prochlorococcus" = rocket(7)[6], "Synechococcus" = rocket(7)[4], "picoeukaryotes (< 2µm)" = rocket(7)[3],  "nanoeukaryotes (2-5µm)" = rocket(7)[2])
 ### Calculate mean and sd over binned distance from the edges of the NPSG
 
-res <- 200 # km (i.e data binned every 100 km)
+res <- 250 # km (i.e data binned every 100 km)
 
 d <- range(meta_gyre_d$distance)
 
