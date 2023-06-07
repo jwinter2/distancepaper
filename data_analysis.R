@@ -109,10 +109,11 @@ decomp <-  function(data, day = 3){
   return(ts)
 }
 
+day <- 3
 seaflow <-  seaflow %>%
   group_by(pop, cruise) %>%
   filter(length(unique(date)) > 24*day) %>%
-  do(cbind(., decomp(., day = 3))) %>%
+  do(cbind(., decomp(., day))) %>%
   rename(qc_diel = mean,
          qc_diel_sd = sd) %>%
   select(!time) %>%
