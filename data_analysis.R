@@ -522,7 +522,7 @@ fig2a <- data_figures %>%
     scale_y_continuous(name = "biomass (μgC/L)",
       sec.axis = sec_axis( trans=~./coeff, name="DIN (µmol/L)")) +
     facet_wrap( direction ~ cruise, ncol = 5) +
-    theme_bw(base_size = 20) +
+    theme_bw(base_size = 13) +
     theme(legend.position = "top") +
     labs(y = "biomass (μgC/L)", x = "distance (km)")
          
@@ -537,7 +537,7 @@ fig2b <- data_figures %>%
   scale_color_manual(values = pop_cols, guide = "none") +
   scale_y_continuous(name = "contribution") +
   facet_wrap(direction ~ cruise, ncol = 5) +
-  theme_bw(base_size = 20) +
+  theme_bw(base_size = 13) +
   theme(legend.position = "top") +
   labs(y = "biomass (μgC/L)", x = "distance (km)")
 
@@ -545,10 +545,13 @@ fig2b <- data_figures %>%
 # ggpubr::ggarrange(fig2a, fig2b, nrow = 2, common.legend = TRUE)
 # dev.off()
 
-png("figures/Figure_2.png", width = 2500, height = 1500, res = 200)
+png("figures/Figure_2a.png", width = 2500, height = 1500, res = 200)
 print(fig2a)
 dev.off()
 
+png("figures/Figure_2b.png", width = 2500, height = 1500, res = 200)
+print(fig2b)
+dev.off()
 
 
 
