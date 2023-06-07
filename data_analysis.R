@@ -423,6 +423,14 @@ for (cruise_name in unique(front_uncertainties$cruise)){
 g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>%  layout(geo = geo)
 #g
 
+# get proportion stats
+prop <- data_figures %>% 
+        group_by(distance, cruise) %>% 
+        reframe(sum = sum(c_per_uL_mean))
+prop <- merge(data_figures, prop)
+prop <- prop %>% 
+       group_by(pop, distance, cruise) %>% 
+       reframe(prop_c = c_per_uL_mean / sum)
 
 #----------------
 # c. Main Figures
