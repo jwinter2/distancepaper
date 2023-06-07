@@ -593,11 +593,11 @@ dev.off()
 # correlation plot
 
 corr_data <- data_figures %>% 
-  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, MLD_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
   #na.omit() %>% 
   pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
 
-colnames(corr_data) <- c("mixed layer depth","nitrate", "salinity", "temperature", "daily par",
+colnames(corr_data) <- c("nitrate", "salinity", "temperature", "daily par",
                          "biomass Prochlorococcus", "biomass Synechococcus",
                          "biomass nanoeukaryotes", "biomass picoeukaryotes",
                          "diameter Prochlorococcus", "diameter Synechococcus",
@@ -605,7 +605,7 @@ colnames(corr_data) <- c("mixed layer depth","nitrate", "salinity", "temperature
                          "growth rate Prochlorococcus", "growth rate Synechococcus",
                          "growth rate nanoeukaryotes", "growth rate picoeukaryotes")
 
-corr_data <- corr_data[,c("mixed layer depth","nitrate", "salinity", "temperature", "daily par",
+corr_data <- corr_data[,c("nitrate", "salinity", "temperature", "daily par",
                          "biomass Prochlorococcus", "biomass Synechococcus",
                          "biomass nanoeukaryotes", "biomass picoeukaryotes",
                          "diameter Prochlorococcus", "diameter Synechococcus",
