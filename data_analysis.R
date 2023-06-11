@@ -534,34 +534,27 @@ fig2a <- data_figures %>%
     theme(legend.position = "top") +
     labs(y = "biomass (μgC/L)", x = "distance (km)")
          
-fig2b <- data_figures %>%
-  filter(distance > -1500) %>%
-  ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) +
-  geom_line(lwd = 1, position = "fill") +
-  geom_area(position = "fill",alpha = 0.5) +
-  #geom_point(aes(distance, din), col = 1, pch = 1, size = 3, show.legend = FALSE) + 
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_fill_manual(values = pop_cols, name = "population") +
-  scale_color_manual(values = pop_cols, guide = "none") +
-  scale_y_continuous(name = "contribution") +
-  facet_wrap(direction ~ cruise, ncol = 5) +
-  theme_bw(base_size = 13) +
-  theme(legend.position = "top") +
-  labs(y = "biomass (μgC/L)", x = "distance (km)")
 
-# png("figures/Figure_2.png", width = 3500, height = 3200, res = 200)
-# ggpubr::ggarrange(fig2a, fig2b, nrow = 2, common.legend = TRUE)
-# dev.off()
 
-png("figures/Figure_2a.png", width = 2500, height = 1500, res = 200)
+png("figures/Figure_2.png", width = 2500, height = 1500, res = 200)
 print(fig2a)
 dev.off()
 
-png("figures/Figure_2b.png", width = 2500, height = 1500, res = 200)
-print(fig2b)
-dev.off()
-
-
+# directional
+fig2dir <- data_figures %>%
+  filter(distance > -1500) %>%
+  ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) + 
+  geom_smooth(position = "stack",alpha = 0.5, lwd=1) +
+  geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  scale_fill_manual(values = pop_cols, name = "population") +
+  scale_color_manual(values = pop_cols, guide = "none") +
+  scale_y_continuous(name = "biomass (μgC/L)",
+                     sec.axis = sec_axis( trans=~./coeff, name="DIN (µmol/L)")) +
+  facet_wrap(~ direction, ncol = 3) +
+  theme_bw(base_size = 13) +
+  theme(legend.position = "top") +
+  labs(y = "biomass (μgC/L)", x = "distance (km)")
 
 
 ### FIGURE 3
@@ -577,7 +570,7 @@ fig3 <- data_figures %>%
   geom_line(aes(col= pop), lwd= 1, show.legend = TRUE) +
   scale_color_manual(values = pop_cols, name = "population") +
   facet_wrap(direction ~ cruise, ncol = 5) +
-  theme_bw(base_size = 20) +
+  theme_bw(base_size = 13) +
   theme(legend.position = "top") +
   labs(y = "Net cellular growth (1/d)", x = "Distance (km)")
 
@@ -586,6 +579,19 @@ print(fig3)
 dev.off()
 
 
+#directional
+fig3dir <- data_figures %>%
+  filter(distance > -1500) %>%
+  drop_na(daily_growth_mean) %>%
+  ggplot(aes(distance, daily_growth_mean, group = pop)) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  geom_smooth(aes(col= pop), lwd= 1, show.legend = TRUE) +
+  scale_color_manual(values = pop_cols, name = "population") +
+  facet_wrap(~direction, ncol = 3) +
+  theme_bw(base_size = 13) +
+  theme(legend.position = "top") +
+  labs(y = "Net cellular growth (1/d)", x = "Distance (km)")
+
 
 
 
@@ -593,11 +599,13 @@ dev.off()
 # correlation plot
 
 corr_data <- data_figures %>% 
-  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  # if we want direction
+  filter(direction == "south") %>%
+  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
   #na.omit() %>% 
   pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
 
-colnames(corr_data) <- c("nitrate", "salinity", "temperature", "daily par",
+colnames(corr_data) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
                          "biomass Prochlorococcus", "biomass Synechococcus",
                          "biomass nanoeukaryotes", "biomass picoeukaryotes",
                          "diameter Prochlorococcus", "diameter Synechococcus",
@@ -605,7 +613,7 @@ colnames(corr_data) <- c("nitrate", "salinity", "temperature", "daily par",
                          "growth rate Prochlorococcus", "growth rate Synechococcus",
                          "growth rate nanoeukaryotes", "growth rate picoeukaryotes")
 
-corr_data <- corr_data[,c("nitrate", "salinity", "temperature", "daily par",
+corr_data <- corr_data[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
                          "biomass Prochlorococcus", "biomass Synechococcus",
                          "biomass nanoeukaryotes", "biomass picoeukaryotes",
                          "diameter Prochlorococcus", "diameter Synechococcus",
@@ -642,6 +650,27 @@ dev.off()
 #------------------------
 # d. Supplemental Figures 
 #------------------------
+
+# alternate form of fig2
+fig2b <- data_figures %>%
+  filter(distance > -1500) %>%
+  ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) +
+  geom_line(lwd = 1, position = "fill") +
+  geom_area(position = "fill",alpha = 0.5) +
+  #geom_point(aes(distance, din), col = 1, pch = 1, size = 3, show.legend = FALSE) + 
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  scale_fill_manual(values = pop_cols, name = "population") +
+  scale_color_manual(values = pop_cols, guide = "none") +
+  scale_y_continuous(name = "contribution") +
+  facet_wrap(direction ~ cruise, ncol = 5) +
+  theme_bw(base_size = 13) +
+  theme(legend.position = "top") +
+  labs(y = "biomass (μgC/L)", x = "distance (km)")
+
+# png("figures/Figure_2.png", width = 3500, height = 3200, res = 200)
+# ggpubr::ggarrange(fig2a, fig2b, nrow = 2, common.legend = TRUE)
+# dev.off()
+
 # alternate form of fig 3
 fig3 <- data_figures %>%
   filter(distance > -1500) %>%
