@@ -522,7 +522,7 @@ fig2a <- data_figures %>%
     filter(distance > -1500) %>%
     ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) + 
     geom_line(lwd = 1, position = "stack") + 
-    geom_area(position = "stack",alpha = 0.5) +
+    geom_ribbon(aes(x=distance, y=c_per_uL_mean, ymin=c_per_uL_mean, ymax=c_per_uL_mean, group=pop, fill=pop), position="stack", alpha=0.5) +
     geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
     geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
     scale_fill_manual(values = pop_cols, name = "population") +
@@ -536,15 +536,26 @@ fig2a <- data_figures %>%
          
 
 
-png("figures/Figure_2.png", width = 2500, height = 1500, res = 200)
+png("figures/Figure_2a.png", width = 2500, height = 1500, res = 200)
 print(fig2a)
 dev.off()
 
 # directional
-fig2dir <- data_figures %>%
+dist_binned <- meta_gyre_d %>%
+  group_by(pop, direction,
+           distance = cut(distance, seq(d[1],d[2], by = res), 
+                          labels = seq(d[1],d[2], by = res)[-1])) %>%
+  dplyr::summarise_all(list(mean = function(x) mean(x, na.rm = TRUE), 
+                            sd = function(x) sd(x, na.rm = TRUE))) %>%
+  mutate(distance = as.numeric(as.character(distance)),
+         pop = factor(pop, levels = c(names(pop_cols)[4], names(pop_cols)[3], names(pop_cols)[2], names(pop_cols)[1]))) %>%
+  ungroup(direction)
+
+fig2b <- dist_binned %>%
   filter(distance > -1500) %>%
   ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) + 
-  geom_smooth(position = "stack",alpha = 0.5, lwd=1) +
+  geom_line(lwd = 1, position = "stack") + 
+  geom_ribbon(aes(x=distance, y=c_per_uL_mean, ymin=c_per_uL_mean, ymax=c_per_uL_mean, group=pop, fill=pop), position="stack", alpha=0.5) +
   geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
   scale_fill_manual(values = pop_cols, name = "population") +
@@ -555,6 +566,10 @@ fig2dir <- data_figures %>%
   theme_bw(base_size = 13) +
   theme(legend.position = "top") +
   labs(y = "biomass (μgC/L)", x = "distance (km)")
+
+png("figures/Figure_2b.png", width = 2500, height = 1500, res = 200)
+print(fig2b)
+dev.off()
 
 
 ### FIGURE 3
@@ -598,42 +613,6 @@ fig3dir <- data_figures %>%
 
 ### FIGURE 4
 # correlation plot
-
-corr_data <- data_figures %>% 
-  # if we want direction
-  filter(direction == "south") %>%
-  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
-  #na.omit() %>% 
-  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
-
-colnames(corr_data) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                         "biomass Pro", "biomass Syn",
-                         "biomass nano", "biomass pico",
-                         "diameter Pro", "diameter Syn",
-                         "diameter nano", "diameter pico",
-                         "growth rate Pro", "growth rate Syn",
-                         "growth rate nano", "growth rate pico")
-
-corr_data <- corr_data[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                         "biomass Pro", "biomass Syn",
-                         "biomass nano", "biomass pico",
-                         "diameter Pro", "diameter Syn",
-                         "growth rate Pro", "growth rate Syn")]
-
-cor_all <- cor(corr_data, use = "complete.obs")
-cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
-
-# adjust for multiple comparisons
-pAdj <- p.adjust(c(cor_all_p[[1]]), method = "BH")
-resAdj <- matrix(pAdj, ncol = dim(cor_all_p[[1]])[1])
-dimnames(resAdj) <- dimnames(cor_all_p$p)
-
-png("figures/Figure_4.png", width = 2500, height = 1600, res = 200)
-fig_cor <- corrplot(cor_all, p.mat = resAdj, sig.level = 0.01, insig = "blank",
-                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
-                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
-dev.off()
-
 
 # directional
 corr_data_north <- data_figures %>% 
@@ -752,6 +731,43 @@ dev.off()
 #------------------------
 # d. Supplemental Figures 
 #------------------------
+
+# corrplot of all directions
+corr_data <- data_figures %>% 
+  # if we want direction
+  filter(direction == "south") %>%
+  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  #na.omit() %>% 
+  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
+
+colnames(corr_data) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
+                         "biomass Pro", "biomass Syn",
+                         "biomass nano", "biomass pico",
+                         "diameter Pro", "diameter Syn",
+                         "diameter nano", "diameter pico",
+                         "growth rate Pro", "growth rate Syn",
+                         "growth rate nano", "growth rate pico")
+
+corr_data <- corr_data[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
+                          "biomass Pro", "biomass Syn",
+                          "biomass nano", "biomass pico",
+                          "diameter Pro", "diameter Syn",
+                          "growth rate Pro", "growth rate Syn")]
+
+cor_all <- cor(corr_data, use = "complete.obs")
+cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
+
+# adjust for multiple comparisons
+pAdj <- p.adjust(c(cor_all_p[[1]]), method = "BH")
+resAdj <- matrix(pAdj, ncol = dim(cor_all_p[[1]])[1])
+dimnames(resAdj) <- dimnames(cor_all_p$p)
+
+png("figures/Figure_4.png", width = 2500, height = 1600, res = 200)
+fig_cor <- corrplot(cor_all, p.mat = resAdj, sig.level = 0.01, insig = "blank",
+                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
+                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
+dev.off()
+
 
 # alternate form of fig2
 fig2b <- data_figures %>%
