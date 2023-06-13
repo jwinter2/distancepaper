@@ -562,6 +562,7 @@ fig2dir <- data_figures %>%
 
 fig3 <- data_figures %>%
   filter(distance > -1500) %>%
+  filter(pop == "Prochlorococcus" | pop == "Synechococcus") %>%
   drop_na(daily_growth_mean) %>%
   ggplot(aes(distance, daily_growth_mean, group = pop)) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
@@ -617,8 +618,7 @@ corr_data <- corr_data[,c("phosphate", "nitrate", "salinity", "temperature", "da
                          "biomass Prochlorococcus", "biomass Synechococcus",
                          "biomass nanoeukaryotes", "biomass picoeukaryotes",
                          "diameter Prochlorococcus", "diameter Synechococcus",
-                         "growth rate Prochlorococcus", "growth rate Synechococcus",
-                         "growth rate nanoeukaryotes", "growth rate picoeukaryotes")]
+                         "growth rate Prochlorococcus", "growth rate Synechococcus")]
 
 cor_all <- cor(corr_data, use = "complete.obs")
 cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
