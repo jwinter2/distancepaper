@@ -607,18 +607,18 @@ corr_data <- data_figures %>%
   pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
 
 colnames(corr_data) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                         "biomass Prochlorococcus", "biomass Synechococcus",
-                         "biomass nanoeukaryotes", "biomass picoeukaryotes",
-                         "diameter Prochlorococcus", "diameter Synechococcus",
-                         "diameter nanoeukaryotes", "diameter picoeukaryotes",
-                         "growth rate Prochlorococcus", "growth rate Synechococcus",
-                         "growth rate nanoeukaryotes", "growth rate picoeukaryotes")
+                         "biomass Pro", "biomass Syn",
+                         "biomass nano", "biomass pico",
+                         "diameter Pro", "diameter Syn",
+                         "diameter nano", "diameter pico",
+                         "growth rate Pro", "growth rate Syn",
+                         "growth rate nano", "growth rate pico")
 
 corr_data <- corr_data[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                         "biomass Prochlorococcus", "biomass Synechococcus",
-                         "biomass nanoeukaryotes", "biomass picoeukaryotes",
-                         "diameter Prochlorococcus", "diameter Synechococcus",
-                         "growth rate Prochlorococcus", "growth rate Synechococcus")]
+                         "biomass Pro", "biomass Syn",
+                         "biomass nano", "biomass pico",
+                         "diameter Pro", "diameter Syn",
+                         "growth rate Pro", "growth rate Syn")]
 
 cor_all <- cor(corr_data, use = "complete.obs")
 cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
@@ -635,7 +635,109 @@ fig_cor <- corrplot(cor_all, p.mat = resAdj, sig.level = 0.01, insig = "blank",
 dev.off()
 
 
+# directional
+corr_data_north <- data_figures %>% 
+  # if we want direction
+  filter(direction == "north") %>%
+  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  #na.omit() %>% 
+  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
 
+colnames(corr_data_north) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
+                         "biomass Pro", "biomass Syn",
+                         "biomass nano", "biomass pico",
+                         "diameter Pro", "diameter Syn",
+                         "diameter nano", "diameter pico",
+                         "growth rate Pro", "growth rate Syn",
+                         "growth rate nano", "growth rate pico")
+
+corr_data_north <- corr_data_north[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
+                          "biomass Pro", "biomass Syn",
+                          "biomass nano", "biomass pico",
+                          "diameter Pro", "diameter Syn",
+                          "growth rate Pro", "growth rate Syn")]
+
+cor_all_north <- cor(corr_data_north, use = "complete.obs")
+cor_all_p_north <- cor.mtest(corr_data_north, use = "complete.obs", conf.level = .99)
+
+# adjust for multiple comparisons
+pAdj_north <- p.adjust(c(cor_all_p_north[[1]]), method = "BH")
+resAdj_north <- matrix(pAdj_north, ncol = dim(cor_all_p_north[[1]])[1])
+dimnames(resAdj_north) <- dimnames(cor_all_p_north$p)
+
+corr_data_east <- data_figures %>% 
+  # if we want direction
+  filter(direction == "east") %>%
+  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  #na.omit() %>% 
+  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
+
+colnames(corr_data_east) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
+                               "biomass Pro", "biomass Syn",
+                               "biomass nano", "biomass pico",
+                               "diameter Pro", "diameter Syn",
+                               "diameter nano", "diameter pico",
+                               "growth rate Pro", "growth rate Syn",
+                               "growth rate nano", "growth rate pico")
+
+corr_data_east <- corr_data_east[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
+                                      "biomass Pro", "biomass Syn",
+                                      "biomass nano", "biomass pico",
+                                      "diameter Pro", "diameter Syn",
+                                      "growth rate Pro", "growth rate Syn")]
+
+cor_all_east <- cor(corr_data_east, use = "complete.obs")
+cor_all_p_east <- cor.mtest(corr_data_east, use = "complete.obs", conf.level = .99)
+
+# adjust for multiple comparisons
+pAdj_east <- p.adjust(c(cor_all_p_east[[1]]), method = "BH")
+resAdj_east <- matrix(pAdj_east, ncol = dim(cor_all_p_east[[1]])[1])
+dimnames(resAdj_east) <- dimnames(cor_all_p_east$p)
+
+corr_data_south <- data_figures %>% 
+  # if we want direction
+  filter(direction == "south") %>%
+  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
+  #na.omit() %>% 
+  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
+
+colnames(corr_data_south) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
+                               "biomass Pro", "biomass Syn",
+                               "biomass nano", "biomass pico",
+                               "diameter Pro", "diameter Syn",
+                               "diameter nano", "diameter pico",
+                               "growth rate Pro", "growth rate Syn",
+                               "growth rate nano", "growth rate pico")
+
+corr_data_south <- corr_data_south[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
+                                      "biomass Pro", "biomass Syn",
+                                      "biomass nano", "biomass pico",
+                                      "diameter Pro", "diameter Syn",
+                                      "growth rate Pro", "growth rate Syn")]
+
+cor_all_south <- cor(corr_data_south, use = "complete.obs")
+cor_all_p_south <- cor.mtest(corr_data_south, use = "complete.obs", conf.level = .99)
+
+# adjust for multiple comparisons
+pAdj_south <- p.adjust(c(cor_all_p_south[[1]]), method = "BH")
+resAdj_south <- matrix(pAdj_south, ncol = dim(cor_all_p_south[[1]])[1])
+dimnames(resAdj_south) <- dimnames(cor_all_p_south$p)
+
+png("figures/Figure_4.png", width = 2600, height = 1200, res = 200)
+par(mfrow=c(1,3))
+fig_cor_north <- corrplot(cor_all_north, p.mat = resAdj_north, sig.level = 0.01, insig = "blank",
+                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
+                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
+mtext("North", at=7, line = -38, cex=1)
+fig_cor_east <- corrplot(cor_all_east, p.mat = resAdj_east, sig.level = 0.01, insig = "blank",
+                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
+                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
+mtext("East", at=7, line = -38, cex=1)
+fig_cor_south <- corrplot(cor_all_south, p.mat = resAdj_south, sig.level = 0.01, insig = "blank",
+                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
+                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
+mtext("South", at=7, line = -38, cex=1)
+dev.off()
 
 
 
