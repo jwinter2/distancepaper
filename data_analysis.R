@@ -507,7 +507,8 @@ fig1d <- data_figures %>%
 
 
 png("figures/Figure_1.png", width=12, height=12, unit="in", res=200)
-ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1d, ncol = 2, nrow = 2, common.legend = TRUE) +
+ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1d, ncol = 2, nrow = 2, 
+                  common.legend = TRUE, labels="auto") +
   theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
 dev.off()
 
@@ -569,6 +570,12 @@ fig2b <- dist_binned %>%
 
 png("figures/Figure_2b.png", width = 2500, height = 1500, res = 200)
 print(fig2b)
+dev.off()
+
+png("figures/Figure_2.png", width = 2500, height = 2500, res = 200)
+ggpubr::ggarrange(fig2a, fig2b, ncol = 1, nrow = 2, 
+                  common.legend = TRUE, labels="auto") +
+  theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
 dev.off()
 
 
@@ -708,14 +715,17 @@ fig_cor_north <- corrplot(cor_all_north, p.mat = resAdj_north, sig.level = 0.01,
                     type = "lower", method = "color", addgrid.col = F, tl.col = "black",
                     col = colorRampPalette(c("blue", "grey90", "red"))(200))
 mtext("North", at=7, line = -38, cex=1)
+mtext("a", at=-1, line = -2, cex=1, font=2)
 fig_cor_east <- corrplot(cor_all_east, p.mat = resAdj_east, sig.level = 0.01, insig = "blank",
                     type = "lower", method = "color", addgrid.col = F, tl.col = "black",
                     col = colorRampPalette(c("blue", "grey90", "red"))(200))
 mtext("East", at=7, line = -38, cex=1)
+mtext("b", at=-1, line = -2, cex=1, font=2)
 fig_cor_south <- corrplot(cor_all_south, p.mat = resAdj_south, sig.level = 0.01, insig = "blank",
                     type = "lower", method = "color", addgrid.col = F, tl.col = "black",
                     col = colorRampPalette(c("blue", "grey90", "red"))(200))
 mtext("South", at=7, line = -38, cex=1)
+mtext("c", at=-1, line = -2, cex=1, font=2)
 dev.off()
 
 
