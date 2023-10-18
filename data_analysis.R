@@ -478,7 +478,7 @@ fig1b <- meta_gyre_d %>%
   ylab("Latitude (ºN)")
 
 # plot environmental variables
-fig1c <- data_figures %>%
+fig1d <- data_figures %>%
   filter(distance > -1500) %>%
   filter(!is.na(NO3_NO2_mean)) %>%
   ggplot(aes(distance, NO3_NO2_mean, color = cruise)) +
@@ -492,7 +492,7 @@ fig1c <- data_figures %>%
   xlab("Distance (km)") +
   ylab("DIN (µmol/L)") 
 
-fig1d <- data_figures %>%
+fig1c <- data_figures %>%
   filter(distance > -1500) %>%
   ggplot(aes(distance, temp_mean, color = cruise)) +
   geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
@@ -504,7 +504,6 @@ fig1d <- data_figures %>%
   theme(text = element_text(size = 20)) + 
   xlab("Distance (km)") +
   ylab("Temperature (ºC)") 
-
 
 png("figures/Figure_1.png", width=12, height=12, unit="in", res=200)
 ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1d, ncol = 2, nrow = 2, 
