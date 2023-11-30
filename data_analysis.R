@@ -728,11 +728,80 @@ mtext("c", at=-1, line = -2, cex=1, font=2)
 dev.off()
 
 
+#------------------------
+# d. Supplemental Figures 
+#------------------------
+
+abund_pro <- data_figures %>%
+     filter(distance > -1500 & pop == "Prochlorococcus") %>%
+     ggplot(aes(distance, n_per_uL_mean,  col = pop, fill = pop)) + 
+     geom_line(lwd = 1, position = "stack") + 
+     geom_ribbon(aes(x=distance, y=n_per_uL_mean, ymin=n_per_uL_mean, ymax=n_per_uL_mean, group=pop, fill=pop), position="stack", alpha=0.5) +
+     geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+     scale_fill_manual(values = pop_cols, name = "population") +
+     scale_color_manual(values = pop_cols, guide = "none") +
+     scale_y_continuous(name = "abundance (cells/μL)") +
+     facet_wrap( direction ~ cruise, ncol = 5) +
+     theme_bw(base_size = 13) +
+     theme(legend.position = "top") +
+     labs(y = "abundance (cells/μL)", x = "distance (km)")
+
+abund_pico <- data_figures %>%
+     filter(distance > -1500 & pop != "Prochlorococcus") %>%
+     ggplot(aes(distance, n_per_uL_mean,  col = pop, fill = pop)) + 
+     geom_line(lwd = 1, position = "stack") + 
+     geom_ribbon(aes(x=distance, y=n_per_uL_mean, ymin=n_per_uL_mean, ymax=n_per_uL_mean, group=pop, fill=pop), position="stack", alpha=0.5) +
+     geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+     scale_fill_manual(values = pop_cols, name = "population") +
+     scale_color_manual(values = pop_cols, guide = "none") +
+     scale_y_continuous(name = "abundance (cells/μL)") +
+     facet_wrap( direction ~ cruise, ncol = 5) +
+     theme_bw(base_size = 13) +
+     theme(legend.position = "top") +
+     labs(y = "abundance (cells/μL)", x = "distance (km)")
+
+png("figures/Figure_abundance.png", width = 2500, height = 2500, res = 200)
+ggpubr::ggarrange(abund_pro, abund_pico, ncol = 1, nrow = 2, 
+                  labels="auto") +
+  theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
+dev.off()
+
+cellsizepro <- data_figures %>%
+  filter(distance > -1500) %>%
+  filter(pop == "Prochlorococcus") %>%
+  drop_na(diam_mean) %>%
+  ggplot(aes(distance, diam_mean, group = pop)) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  geom_line(aes(col= pop), lwd= 1, show.legend = TRUE) +
+  geom_linerange(aes(ymin = diam_mean - diam_sd -  mean(diam_sd, na.rm = TRUE), 
+                     ymax = diam_mean + diam_sd +  mean(diam_sd, na.rm = TRUE), col = pop), lwd= 0.5, show.legend = FALSE) +
+  scale_color_manual(values = pop_cols, name = "population") +
+  facet_wrap(direction ~ cruise, ncol = 5) +
+  theme_bw(base_size = 13) +
+  theme(legend.position = "top") +
+  labs(y = "Equivalent spherical diameter (μm)", x = "Distance (km)")
 
 
+cellsizepico <- data_figures %>%
+  filter(distance > -1500) %>%
+  filter(pop != "Prochlorococcus") %>%
+  drop_na(diam_mean) %>%
+  ggplot(aes(distance, diam_mean, group = pop)) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  geom_line(aes(col= pop), lwd= 1, show.legend = TRUE) +
+  geom_linerange(aes(ymin = diam_mean - diam_sd -  mean(diam_sd, na.rm = TRUE), 
+                     ymax = diam_mean + diam_sd +  mean(diam_sd, na.rm = TRUE), col = pop), lwd= 0.5, show.legend = FALSE) +
+  scale_color_manual(values = pop_cols, name = "population") +
+  facet_wrap(direction ~ cruise, ncol = 5) +
+  theme_bw(base_size = 13) +
+  theme(legend.position = "top") +
+  labs(y = "Equivalent spherical diameter (μm)", x = "Distance (km)")
 
-
-
+png("figures/Figure_diameter.png", width = 2500, height = 2500, res = 200)
+ggpubr::ggarrange(cellsizepro, cellsizepico, ncol = 1, nrow = 2, 
+                  labels="auto") +
+  theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
+dev.off()
 
 
 #### UNCHECKED CODE
