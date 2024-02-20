@@ -804,11 +804,11 @@ ggpubr::ggarrange(cellsizepro, cellsizepico, ncol = 1, nrow = 2,
 dev.off()
 
 
-# heterotrophic bacterial abundance from CMAP for each cruise
+# heterotrophic bacterial abundance or biomass from CMAP for each cruise
 grad4 <- read.csv("~/Downloads/Discrete Flow Cytometry of Depth Profile Samples from the Gradients 4 (2021) Cruise Using a BD Influ/Influx_Stations_Gradients_2021v1_1.csv")
 plotgrad4 <- grad4 %>%
   ggplot() +
-  geom_point(aes(lon, lat, color = cell_abundance_bacteria), size=4) +
+  geom_point(aes(lon, lat, color = carbon_biomass_bacteria), size=4) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
   theme_bw() +
@@ -816,13 +816,13 @@ plotgrad4 <- grad4 %>%
   theme(text = element_text(size = 20)) + 
   xlab("Longitude (ºW)") +
   ylab("Latitude (ºN)") +
-  labs(color="Bacterial Abundance (cells/uL)") +
+  labs(color="Bacterial Biomass (μgC/L)") +
   ggtitle("TN397")
 
 grad1 <- read.csv("~/Downloads/Discrete flow cytometry from the Gradients 2016 cruise using a BD Influx Cell Sorter/Influx_Stations_Gradients_2016.csv")
 plotgrad1 <- grad1 %>%
   ggplot() +
-  geom_point(aes(lon, lat, color = abundance_bacteria), size=4) +
+  geom_point(aes(lon, lat, color = biomass_bacteria), size=4) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
   theme_bw() +
@@ -830,10 +830,10 @@ plotgrad1 <- grad1 %>%
   theme(text = element_text(size = 20)) + 
   xlab("Longitude (ºW)") +
   ylab("Latitude (ºN)") +
-  labs(color="Bacterial Abundance (cells/uL)") +
+  labs(color="Bacterial Biomass (μgC/L)") +
   ggtitle("KOK1606")
 
-png("figures/Figure_bact_abundance.png", width = 2500, height = 2500, res = 200)
+png("figures/Figure_bact_biomass.png", width = 2500, height = 2500, res = 200)
 ggpubr::ggarrange(plotgrad1, plotgrad4, ncol = 1, nrow = 2, 
                   labels="auto") +
   theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
