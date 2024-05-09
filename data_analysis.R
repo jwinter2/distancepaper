@@ -732,6 +732,25 @@ dev.off()
 # d. Supplemental Figures 
 #------------------------
 
+sal <- data_figures %>%
+  filter(distance > -1500) %>%
+  ggplot(aes(distance, salinity_mean, color = cruise)) +
+  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
+  geom_point(size = 2,  show.legend = T) +
+  geom_line(aes(col = cruise), lwd = 2) +
+  geom_linerange(aes(ymin = salinity_mean - salinity_sd, ymax = salinity_mean + salinity_sd), lwd = 0.5) +
+  theme_bw() +
+  scale_color_manual(values = getPalette(10)) +
+  theme(text = element_text(size = 20)) + 
+  xlab("Distance (km)") +
+  ylab("Salinity (PSU)")
+
+png("figures/Figure_salinity.png", width = 2500, height = 2500, res = 200)
+ggpubr::ggarrange(sal, ncol = 1, nrow = 1, 
+                  labels="auto") +
+  theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
+dev.off()
+
 abund_pro <- data_figures %>%
      filter(distance > -1500 & pop == "Prochlorococcus") %>%
      ggplot(aes(distance, n_per_uL_mean,  col = pop, fill = pop)) + 
