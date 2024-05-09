@@ -445,7 +445,7 @@ getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
 fig1a <- meta_gyre_d %>%
   filter(distance > -2000) %>%
   ggplot() +
-  geom_point(aes(lon - 360, lat, color = cruise), size=2, alpha = 0.7, show.legend = F) +
+  geom_path(aes(lon - 360, lat, color = cruise), size=2, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
   theme_bw() +
@@ -468,7 +468,7 @@ fig1a <- meta_gyre_d %>%
 fig1b <- meta_gyre_d %>%
   filter(distance > -2000) %>%
   ggplot() +
-  geom_point(aes(lon - 360, lat, color = gyre), size=2, alpha = 0.7, show.legend = F) +
+  geom_path(aes(lon - 360, lat, color = gyre, group = cruise), size=2, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
   theme_bw() +
