@@ -40,7 +40,7 @@ geo <- list(
   )
 )
 
-
+setwd("/Users/ribalet/Documents/Codes/distancepaper")
 
 #-------------------
 # Environmental data
@@ -54,14 +54,14 @@ env <- env %>%
   group_by(cruise) %>%
   mutate(
     salinity = case_when(salinity < 32 ~ NaN,
-      date < as.Date("2017-06-05") & cruise == "Gradients 2" ~ NaN, # contaminated salinity during first half the cruise
-      c(abs(diff(salinity)),0) > 0.5 ~ NaN, # sporadic drops in salinity during TN271 cruise
-      TRUE ~ salinity),
+                         date < as.Date("2017-06-05") & cruise == "Gradients 2" ~ NaN, # contaminated salinity during first half the cruise
+                         c(abs(diff(salinity)),0) > 0.5 ~ NaN, # sporadic drops in salinity during TN271 cruise
+                         TRUE ~ salinity),
     temp = case_when(temp > 32 ~ NaN,
-      TRUE ~ temp))
+                     TRUE ~ temp))
 
 # calculate daily-averaged par
-env<- env %>%
+env <- env %>%
   group_by(days = lubridate::floor_date(date, unit = "days")) %>%
   mutate(daily_par = mean(par)) %>%
   ungroup() %>%
@@ -70,14 +70,20 @@ env<- env %>%
 #-------------------
 # Phytoplankton data
 #-------------------
-seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-24.parquet") %>%
+seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-24.parquet") %>% 
+  mutate(n_per_uL = case_when(pop == "picoeuk" & cruise == "KM1923_751" ~ n_per_uL / 3, # adjust for virtual core correction
+                              pop == "prochloro" & cruise == "KM1923_751" ~ n_per_uL * 2,
+                              TRUE ~ n_per_uL),
+         c_per_uL = case_when(pop == "picoeuk" & cruise == "KM1923_751" ~ c_per_uL / 3, # adjust for virtual core correction
+                              pop == "prochloro" & cruise == "KM1923_751" ~ c_per_uL * 2 ,
+                              TRUE ~ c_per_uL)) %>%
   filter(pop != "croco") %>% # remove this population as it is only found in low abundance in too few cruises
   group_by(pop) %>%
-    mutate(pop = case_when(
-      pop == "prochloro" ~ "Prochlorococcus",
-      pop == "synecho" ~ "Synechococcus",
-      pop == "picoeuk" & esd < 2 ~ "picoeukaryotes (< 2µm)",
-      TRUE ~ "nanoeukaryotes (2-5µm)")) 
+  mutate(pop = case_when(
+    pop == "prochloro" ~ "Prochlorococcus",
+    pop == "synecho" ~ "Synechococcus",
+    pop == "picoeuk" & esd < 2 ~ "picoeukaryotes (< 2µm)",
+    TRUE ~ "nanoeukaryotes (2-5µm)")) 
 
 
 # Note for conversion from carbon per cell to equivalent spherical diameter
@@ -86,25 +92,28 @@ d <- 0.261; e <- 0.860 # < 3000 µm3
 
 seaflow <- seaflow_psd %>% 
   group_by(cruise, date, pop) %>%
-  dplyr::summarise(
+  dplyr::reframe(
     lat = unique(lat, na.rm = TRUE),
     lon = unique(lon, na.rm = TRUE),
     n_per_uL = sum(n_per_uL, na.rm = TRUE), # calculate cell abundance per population
     c_per_uL = sum(c_per_uL, na.rm = TRUE)) %>% # calculate carbon biomass per population
-    mutate(qc = c_per_uL / n_per_uL, # calculate carbon per cell
-      diam = round(2*(3/(4*base::pi)*(qc/d)^(1/e))^(1/3),5)) %>% # convert carbon per cell to equivalent spherical diameter *
-    arrange(date) 
+  mutate(qc = c_per_uL / n_per_uL, # calculate carbon per cell
+         diam = round(2*(3/(4*base::pi)*(qc/d)^(1/e))^(1/3),5)) %>% # convert carbon per cell to equivalent spherical diameter *
+  arrange(date) 
 
-#------------------------------------
-# Extract diel trend of carbon quotas
-#------------------------------------
+#-------------------
+# Extract diel trend
+#-------------------
 decomp <-  function(data, day = 3){
   #print(unique(data[,"cruise"]))
   time <- unlist(list(zoo::rollapply(data[,"date"], width=24*day, function(x) unique(x), by.column = F)))
   diel <- unlist(list(zoo::rollapply(data[,"qc"], width=24*day, function(x) decompose(ts(x, frequency=24), type="mult")$seasonal, by.column= F))) -1
-  ts <- tibble(time, diel) %>%
+  quotas <- unlist(list(zoo::rollapply(data[,"qc"], width=24*day, function(x) decompose(ts(x, frequency=24), type="mult")$trend, by.column= F))) -1
+  biomass <- unlist(list(zoo::rollapply(data[,"c_per_uL"], width=24*day, function(x) decompose(ts(x, frequency=24), type="mult")$trend, by.column= F))) -1
+  abundance <- unlist(list(zoo::rollapply(data[,"n_per_uL"], width=24*day, function(x) decompose(ts(x, frequency=24), type="mult")$trend, by.column= F))) -1
+  ts <- tibble(time, diel, quotas, biomass, abundance) %>%
     group_by(time) %>%
-    summarize_all(list(mean = mean, sd = sd)) %>%
+    summarize_all(function(x) mean(x, na.rm = T)) %>%
     ungroup()
   return(ts)
 }
@@ -114,8 +123,6 @@ seaflow <-  seaflow %>%
   group_by(pop, cruise) %>%
   filter(length(unique(date)) > 24*day) %>%
   do(cbind(., decomp(., day))) %>%
-  rename(qc_diel = mean,
-         qc_diel_sd = sd) %>%
   select(!time) %>%
   arrange(date) %>%
   ungroup(cruise) 
@@ -125,9 +132,9 @@ seaflow <-  seaflow %>%
 # Combine environmental data with phytoplankton  data
 #----------------------------------------------------
 pre_meta <- full_join(seaflow %>% select(!cruise), env %>% select(!c(lat, lon)), by = "date") %>%
-        group_by(cruise) %>%
-        mutate(lat = zoo::na.approx(lat, na.rm = FALSE),
-              lon = zoo::na.approx(lon, na.rm = FALSE))
+  group_by(cruise) %>%
+  mutate(lat = zoo::na.approx(lat, na.rm = FALSE),
+         lon = zoo::na.approx(lon, na.rm = FALSE))
 
 # change longitude coordinate system 
 pre_meta <- pre_meta  %>% 
@@ -138,12 +145,12 @@ pre_meta <- pre_meta  %>%
 
 # change Gradients cruise names to their official cruise names (R2R repository)
 pre_meta  <- pre_meta  %>% mutate(cruise = case_when(cruise == "Gradients 1" ~ "KOK1606",
-                                   cruise == "Gradients 2" ~ "MGL1704",
-                                   cruise == "Gradients 3" ~ "KM1906",
-                                   cruise == "Gradients 4" & lat > 17 & lon > 215 ~ "TN397a",
-                                   cruise == "Gradients 4" & lat <= 17 & lon > 219.5 ~ "TN397b",
-                                   cruise == "Gradients 4" & lon <= 219.5 ~ "TN397c",
-                                   TRUE ~ cruise)) %>%
+                                                     cruise == "Gradients 2" ~ "MGL1704",
+                                                     cruise == "Gradients 3" ~ "KM1906",
+                                                     cruise == "Gradients 4" & lat > 17 & lon > 215 ~ "TN397a",
+                                                     cruise == "Gradients 4" & lat <= 17 & lon > 219.5 ~ "TN397b",
+                                                     cruise == "Gradients 4" & lon <= 219.5 ~ "TN397c",
+                                                     TRUE ~ cruise)) %>%
   filter(cruise != "SR1917") %>% # cruise outside of region of interest
   filter(cruise != "TN271") %>% # cruise outside of region of interest
   filter(cruise != "KM1502") # cruise with little variation
@@ -151,12 +158,17 @@ pre_meta  <- pre_meta  %>% mutate(cruise = case_when(cruise == "Gradients 1" ~ "
 
 # Add cruise direction 
 pre_meta  <- pre_meta  %>% mutate(direction = case_when(cruise == "KOK1606" | cruise == "MGL1704" | 
-                                                cruise == "KM1906" | cruise== "KM1712" |
-                                                cruise == "KM1713" ~ "north",
-                                              cruise == "TN398" | cruise == "TN397a" |
-                                                cruise == "TN397b" ~ "east",
-                                              cruise == "TN397c" | cruise == "KM1923" ~ "south"),
-           direction = factor(direction, levels = c("north", "east", "south")))
+                                                        cruise == "KM1906" | cruise== "KM1712" |
+                                                        cruise == "KM1713" ~ "North",
+                                                        cruise == "TN398" | cruise == "TN397a"  ~ "East",
+                                                        cruise == "TN397b" | cruise == "TN397c" | cruise == "KM1923" ~ "South"),
+                                  direction = factor(direction, levels = c("North", "East", "South")),
+                                  season = case_when(cruise == "KOK1606" | cruise == "MGL1704" | cruise == "KM1906" ~ "Spring",
+                                                     cruise == "KM1712" | cruise == "KM1713" ~ "Summer",
+                                                     cruise == "KM1923" | cruise == "TN397a" | cruise == "TN397c" | cruise == "TN397b" ~ "Fall",
+                                                     cruise == "TN398" ~ "Winter"),
+                                  season = factor(season, levels = c("Spring", "Summer", "Fall", "Winter")),
+                                  label = paste0(cruise, "/n(",direction, season,")"))
 
 ### plot cruise track
 # plot_geo(pre_meta, lat = ~ lat, lon = ~ lon, color = ~ cruise, mode = "scatter") %>%  layout(geo = geo)
@@ -173,10 +185,11 @@ meta <- pre_meta  %>% group_by(pop) %>%
          daynight = c(0,abs(diff(daytime))),
          day = cumsum(daynight)) %>%
   group_by(cruise, direction, pop, daytime, day) %>%
-  mutate(n_obs = length(qc_diel),
-         daily_growth = case_when(daytime == 1 ~ diff(range(qc_diel, na.rm= TRUE)),
-                                  daytime == 0 ~ - diff(range(qc_diel, na.rm= TRUE))))
-  
+  mutate(n_obs = length(diel),
+         daily_growth = case_when(daytime == 1 ~ diff(range(diel, na.rm= TRUE)),
+                                  daytime == 0 ~ - diff(range(diel, na.rm= TRUE)))) %>%
+  ungroup()
+
 
 ### curation of growth rate
 meta <- meta %>%
@@ -184,7 +197,6 @@ meta <- meta %>%
     daytime == 0 ~ NaN, # replace negative growth during nighttime by 0
     n_obs < 6 ~ NaN, # too few data point in a day
     TRUE ~ daily_growth)) %>%
-  ungroup(daytime, day, cruise, direction, pop) %>%
   select(!c(day, daytime, daynight, n_obs))
 
 ### plot daily growth estimates for each cruise over time
@@ -192,6 +204,8 @@ meta <- meta %>%
 #   geom_point(pch= 21) +
 #   facet_wrap(. ~ cruise, scale = "free_x") +
 #   theme_bw()
+
+
 
 
 
@@ -228,7 +242,7 @@ d <- range(meta_distance$distance)
 
 meta_distance_binned <- meta_distance %>%
   group_by(
-    cruise, direction, 
+    cruise, direction, season, 
     distance = cut(distance, seq(d[1],d[2], by = resolution), 
       labels = seq(d[1],d[2], by = resolution)[-1])) %>%
   dplyr::summarise_all(function(x) mean(x, na.rm = TRUE)) %>%
@@ -247,8 +261,8 @@ smooth <- mean(c(smooth_up,smooth_down)) # mean smoothing parameter
 
 meta_distance_binned <- meta_distance_binned %>% 
   filter(!is.na(salinity) & !is.na(distance)) %>% # remove NA's for smoothing
-  group_by(cruise, direction) %>%
-  dplyr::summarize(
+  group_by(cruise, direction, season) %>%
+  dplyr::reframe(
     date = date, lat = lat, lon = lon, distance = distance, salinity = salinity,
     smooth_salinity = smooth.spline(distance, salinity, all.knots= TRUE, spar = smooth)$y, # smooth data to remove noisy changes in salinity
     derivative_salinity = c(NA, abs(diff(smooth_salinity) / as.numeric(diff(distance)))), # calculate the rate of change of salinity over distance
@@ -265,8 +279,8 @@ meta_distance_binned <- meta_distance_binned %>%
 ### Estimate salinity boundaries of NPSG's transition zone
 # only look at the closest front to the NPSG's salinity (mean salinity ~ 35 psu) 
 tz <- meta_distance_binned %>% 
-    dplyr::group_by(cruise, direction) %>% 
-    dplyr::summarize(sal_front = max(sal_front, na.rm = TRUE),
+    dplyr::group_by(cruise, direction, season) %>% 
+    dplyr::reframe(sal_front = max(sal_front, na.rm = TRUE),
       sal_front_up = max(sal_front_up, na.rm = TRUE),
       sal_front_down = max(sal_front_down, na.rm = TRUE)) 
 
@@ -286,31 +300,22 @@ tz <- meta_distance_binned %>%
 ### Identify locations inside or outside the gyre (0 = gyre; 1 = outside gyre)
 # Note: using the unbinned data this time
 meta_gyre <- left_join(meta, tz) %>%
-  group_by(cruise, direction) %>%
-  mutate(raw_gyre = case_when(salinity > sal_front ~ 0, 
-      TRUE ~ 1),
-    gyre = case_when(lon > 190 & lat < 24 & raw_gyre == 1 ~ 0,
-      lon > 190 & lat < 11 & raw_gyre == 0 ~ 1,
-      lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0,
-      lon < 190 & raw_gyre == 1 ~ 0,
-      TRUE ~ raw_gyre)) %>%
-  mutate(raw_gyre_down = case_when(salinity > sal_front_down ~ 0, 
-      TRUE ~ 1),
-    gyre_down = case_when(lon > 190 & lat < 24 & raw_gyre_down == 1 ~ 0,
-      lon > 190 & lat < 11 & raw_gyre_down == 0 ~ 1,
-      lon < 220 & lat < 33 & lat > 21 & raw_gyre_down == 1 ~ 0,
-      lon < 190 & raw_gyre_down == 1 ~ 0,
-      TRUE ~ raw_gyre_down)) %>%
-  mutate(raw_gyre_up = case_when(salinity > sal_front_up ~ 0, 
-      TRUE ~ 1),
-    gyre_up = case_when(lon > 190 & lat < 24 & raw_gyre_up == 1 ~ 0,
-      lon > 190 & lat < 11 & raw_gyre_up == 0 ~ 1,
-      lon < 220 & lat < 33 & lat > 21 & raw_gyre_up == 1 ~ 0,
-      lon < 190 & raw_gyre_up == 1 ~ 0,
-      TRUE ~ raw_gyre_up)) %>%
-  select(!c(raw_gyre, raw_gyre_up, raw_gyre_down, # remove unnecessary columns
-    sal_front, sal_front_up, sal_front_down))
+  group_by(cruise, direction, season) %>%
+  mutate(salinity = zoo::na.approx(salinity, na.rm = FALSE))
 
+meta_gyre <- meta_gyre %>%
+  mutate(raw_gyre = case_when(salinity > sal_front ~ 0,
+                              TRUE ~ 1),
+         gyre = case_when(
+           lat < 6 & raw_gyre == 0 ~ 1,
+           lat > 7 & lat < 23 & raw_gyre == 1 ~ 0,
+           lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0,
+           TRUE ~ raw_gyre)) %>%
+  select(!c(raw_gyre, sal_front, sal_front_down, sal_front_up)) # remove unnecessary columns
+
+
+# plot gyre
+# plot_geo(meta_gyre, lat = ~ lat, lon = ~ lon, color = ~ as.character(gyre), mode = "scatter") %>%  layout(geo = geo)
 
 
 ### calculate distance (km) from boundaries of the NPSG for each cruise
@@ -319,27 +324,12 @@ meta_gyre <- left_join(meta, tz) %>%
 id <- which(diff(meta_gyre$gyre) != 0 & diff(meta_gyre$date) < 345600)
 boundaries <- meta_gyre[id,] %>% 
   dplyr::group_by(date) %>% 
-  dplyr::summarize(lat = mean(lat), 
+  dplyr::reframe(lat = mean(lat), 
     lon = mean(lon),
     cruise = unique(cruise),
-    direction = unique(direction))
-
-id_down <- which(diff(meta_gyre$gyre_down) != 0 & diff(meta_gyre$date) < 345600)
-boundaries_down <- meta_gyre[id_down,] %>% 
-  dplyr::group_by(date) %>% 
-  dplyr::summarize(lat = mean(lat), 
-    lon = mean(lon),
-    cruise = unique(cruise),
-    direction = unique(direction))
-
-id_up <- which(diff(meta_gyre$gyre_up) != 0 & diff(meta_gyre$date) < 345600)
-boundaries_up <- meta_gyre[id_up,] %>% 
-  dplyr::group_by(date) %>% 
-  dplyr::summarize(lat = mean(lat), 
-    lon = mean(lon),
-    cruise = unique(cruise),
-    direction = unique(direction))
-
+    direction = unique(direction),
+    season = unique(season),
+    label = paste0(cruise, "\n(",direction, "/",season, ")"))
 
 ### calculate distance from the front
 sf_tz <- sf::st_as_sf(boundaries, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
@@ -350,87 +340,79 @@ for(c in unique(sf_meta$cruise)) {
   sf_tz_g <- sf_tz %>% filter(cruise == c)
   sf_meta_g <- sf_meta %>% filter(cruise == c)
   meta_g <- meta_gyre %>% filter(cruise == c) %>%
-    mutate(distance = apply(sf::st_distance(sf_meta_g, sf_tz_g), 1, function(x) min(x) / 1000)) %>%
-    select(!c(gyre_down, gyre_up))
+    mutate(distance = apply(sf::st_distance(sf_meta_g, sf_tz_g), 1, function(x) min(x) / 1000)) 
   meta_gyre_d <- bind_rows(meta_gyre_d, meta_g)
 }
 
-# calculate uncertainties in front location
-sf_tz_down <- sf::st_as_sf(boundaries_down, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
-sf_tz_up <- sf::st_as_sf(boundaries_up, coords = c("lon", "lat"), dim = 'XY', remove = FALSE, crs = 4326)
-boundaries <- boundaries %>% mutate(up = apply(sf::st_distance(sf_tz, sf_tz_up), 1, function(x) min(x) / 1000), 
-  down = apply(sf::st_distance(sf_tz, sf_tz_down), 1, function(x) min(x) / 1000)) 
 
 # transform to negative numbers when outside gyre
 meta_gyre_d  <- meta_gyre_d %>% 
   mutate(distance = case_when(gyre == 1 ~ distance,
                               TRUE ~ - distance),
-          gyre = case_when(gyre == 0 ~ "inside",
-                           TRUE ~ "outside"))
+         gyre = case_when(
+           gyre == 0 ~ "inside",
+           gyre == 1 ~ "outside"),
+         label = paste0(cruise, "\n(",direction, "/",season, ")"))
 
 ### remove data far outside the gyre
-meta_gyre_d  <- meta_gyre_d %>% filter(distance < 2000)
+meta_gyre_d  <- meta_gyre_d %>% 
+  filter(distance < 2000 & distance > -2000)
+
+
+
+# plot gyre
+#plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ distance, mode = "scatter", colors =  colorRampPalette(c("blue2", "grey90", "red2"))(200)) %>%  layout(geo = geo)
 
 
 
 
-#--------------------------
-# b. BINNING OVER DISTANCE
-#--------------------------
+#------------------------------
+# b. BINNING data over DISTANCE
+#------------------------------
+meta_gyre_d <- read_csv("data/meta_gyre_d.csv")
+
 # set colors
 pop_cols <- c("Prochlorococcus" = rocket(7)[6], "Synechococcus" = rocket(7)[4], "picoeukaryotes (< 2µm)" = rocket(7)[3],  "nanoeukaryotes (2-5µm)" = rocket(7)[2])
+
 ### Calculate mean and sd over binned distance from the edges of the NPSG
 
-res <- 250 # km (i.e data binned every 100 km)
+binning <- 100 # kilometers 
 
-d <- range(meta_gyre_d$distance)
-
-data_figures <- meta_gyre_d %>%
-   group_by(cruise, pop, direction,
-    distance = cut(distance, seq(d[1],d[2], by = res), 
-      labels = seq(d[1],d[2], by = res)[-1])) %>%
+data_figures <- meta_gyre_d  %>%
+   group_by(cruise, pop, gyre, direction, season, label, distance = cut(distance, seq(-1000, 2000, by = binning), 
+      labels = seq(-1000, 2000, by = binning)[-1]), .drop = T) %>%
   dplyr::summarise_all(list(mean = function(x) mean(x, na.rm = TRUE), 
     sd = function(x) sd(x, na.rm = TRUE))) %>%
   mutate(distance = as.numeric(as.character(distance)),
          pop = factor(pop, levels = c(names(pop_cols)[4], names(pop_cols)[3], names(pop_cols)[2], names(pop_cols)[1]))) %>%
-  ungroup(cruise, direction)
+  ungroup()
 
-
-### uncertainties in front location
-binning <- res # uncertainties due to binning
-front_uncertainties <- boundaries %>% 
-  filter(cruise != "SR1917" & cruise != "TN271") %>%
-  group_by(cruise, direction) %>%
-  summarize_all(mean) %>%
-  mutate(up = case_when(up < binning ~ binning, 
-      TRUE ~ up),
-    down = case_when(down < binning ~ - binning, 
-    TRUE ~ - down))
-
-for (cruise_name in unique(front_uncertainties$cruise)){
-  small_unc <- front_uncertainties %>% filter(cruise == cruise_name)
-  up <- which(meta_gyre_d$cruise == cruise_name & meta_gyre_d$distance <= small_unc$up
-              & meta_gyre_d$distance >= 0)
-  meta_gyre_d$gyre[up] <- "transition"
-  down <- which(meta_gyre_d$cruise == cruise_name & meta_gyre_d$distance >= small_unc$down
-              & meta_gyre_d$distance <= 0)
-  meta_gyre_d$gyre[down] <- "transition"
-}
-
-
+### uncertainties in front location due to binning
+meta_gyre_d <- meta_gyre_d %>%
+  mutate(gyre = case_when(
+    abs(distance) < binning ~ "transition",
+    TRUE ~ gyre))
+data_figures <-data_figures %>%
+  mutate(gyre = case_when(
+    abs(distance) < binning ~ "transition",
+    TRUE ~ gyre))
 
 # plot cruise tracks
-g <- plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>%  layout(geo = geo)
-#g
+# plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>%  layout(geo = geo)
+
+
 
 # get proportion stats
 prop <- data_figures %>% 
-        group_by(distance, cruise) %>% 
+        group_by(distance, cruise, season) %>% 
         reframe(sum = sum(c_per_uL_mean))
 prop <- merge(data_figures, prop)
 prop <- prop %>% 
-       group_by(pop, distance, cruise) %>% 
+       group_by(pop, distance, cruise, season) %>% 
        reframe(prop_c = c_per_uL_mean / sum)
+
+
+
 
 #----------------
 # c. Main Figures
@@ -443,9 +425,8 @@ getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
 
 # plot cruise track
 fig1a <- meta_gyre_d %>%
-  filter(distance > -2000) %>%
   ggplot() +
-  geom_path(aes(lon - 360, lat, color = cruise), size=2, show.legend = F) +
+  geom_path(aes(lon - 360, lat, color = cruise), lwd=2, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
   theme_bw() +
@@ -466,9 +447,8 @@ fig1a <- meta_gyre_d %>%
 
 # plot gyre boundaries
 fig1b <- meta_gyre_d %>%
-  filter(distance > -2000) %>%
   ggplot() +
-  geom_path(aes(lon - 360, lat, color = gyre, group = cruise), size=2, show.legend = F) +
+  geom_path(aes(lon - 360, lat, color = gyre, group = cruise), lwd = 2, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
   theme_bw() +
@@ -478,36 +458,93 @@ fig1b <- meta_gyre_d %>%
   ylab("Latitude (ºN)")
 
 # plot environmental variables
-fig1d <- data_figures %>%
-  filter(distance > -1500) %>%
-  filter(!is.na(NO3_NO2_mean)) %>%
-  ggplot(aes(distance, NO3_NO2_mean, color = cruise)) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
-  geom_point(size = 2,  show.legend = T) +
-  geom_line(aes(col = cruise), na.rm = TRUE, lwd = 2) +
-  geom_linerange(aes(ymin = NO3_NO2_mean - NO3_NO2_sd, ymax = NO3_NO2_mean + NO3_NO2_sd), lwd = 0.5) +
+
+fig1c <- data_figures %>%
+  filter(!is.na(salinity_mean)) %>%
+  ggplot(aes(distance, salinity_mean, color = cruise)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_point(size = 2, show.legend = T) +
+  geom_line(aes(col = cruise), lwd = 2) +
+  geom_linerange(aes(ymin = salinity_mean - salinity_sd, ymax = salinity_mean + salinity_sd), lwd = 0.5) +
   theme_bw() +
   scale_color_manual(values = getPalette(10)) +
   theme(text = element_text(size = 20)) + 
-  xlab("Distance (km)") +
-  ylab("DIN (µmol/L)") 
+  xlab("") +
+  ylab("Salinity (psu)") 
 
-fig1c <- data_figures %>%
-  filter(distance > -1500) %>%
+fig1d <- data_figures %>%
+  filter(!is.na(temp_mean)) %>%
   ggplot(aes(distance, temp_mean, color = cruise)) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_point(size = 2,  show.legend = T) +
   geom_line(aes(col = cruise), lwd = 2) +
   geom_linerange(aes(ymin = temp_mean - temp_sd, ymax = temp_mean + temp_sd), lwd = 0.5) +
   theme_bw() +
   scale_color_manual(values = getPalette(10)) +
   theme(text = element_text(size = 20)) + 
-  xlab("Distance (km)") +
-  ylab("Temperature (ºC)") 
+  xlab("") +
+  ylab("Temp (ºC)") 
 
-png("figures/Figure_1.png", width=12, height=12, unit="in", res=200)
-ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1d, ncol = 2, nrow = 2, 
-                  common.legend = TRUE, labels="auto") +
+fig1e <- data_figures %>%
+  filter(!is.na(daily_par_mean)) %>%
+  ggplot(aes(distance, daily_par_mean/100, color = cruise)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_point(size = 2,  show.legend = T) +
+  geom_line(aes(col = cruise), lwd = 2) +
+  geom_linerange(aes(ymin = daily_par_mean/100 - daily_par_sd/100, ymax = daily_par_mean/100 + daily_par_sd/100), lwd = 0.5) +
+  theme_bw() +
+  scale_color_manual(values = getPalette(10)) +
+  theme(text = element_text(size = 20)) + 
+  xlab("Distance (km)") +
+  ylab(expression(paste("Light (µmolE m"^{-2},"s"^{-1},")")))
+  
+
+fig1f <- data_figures %>%
+  filter(!is.na(NO3_NO2_mean)) %>%
+  ggplot(aes(distance, NO3_NO2_mean, color = cruise)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_point(size = 2,  show.legend = T) +
+  geom_line(aes(col = cruise), lwd = 2) +
+  geom_linerange(aes(ymin = NO3_NO2_mean - NO3_NO2_sd, ymax = NO3_NO2_mean + NO3_NO2_sd), lwd = 0.5) +
+  theme_bw() +
+  scale_color_manual(values = getPalette(10)) +
+  theme(text = element_text(size = 20)) + 
+  xlab("") +
+  ylab(expression(paste("DIN (µmol L"^{-1},")"))) +
+  ylim(0,10)
+
+fig1g <- data_figures %>%
+  filter(!is.na(PO4_mean)) %>%
+  ggplot(aes(distance, PO4_mean*10, color = cruise)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_point(size = 2,  show.legend = T) +
+  geom_line(aes(col = cruise), lwd = 2) +
+  geom_linerange(aes(ymin = PO4_mean*10 - PO4_sd*10, ymax = PO4_mean*10 + PO4_sd*10), lwd = 0.5) +
+  theme_bw() +
+  scale_color_manual(values = getPalette(10)) +
+  theme(text = element_text(size = 20)) + 
+  xlab("") +
+  ylab(expression(paste("DIP (µmol L"^{-1},")"))) +
+  ylim(0,10)
+
+fig1h <- data_figures %>%
+  filter(!is.na(MLD_mean)) %>%
+  ggplot(aes(distance, MLD_mean, color = cruise)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_point(size = 2,  show.legend = T) +
+  geom_line(aes(col = cruise), lwd = 2) +
+  geom_linerange(aes(ymin = MLD_mean - MLD_sd, ymax = MLD_mean + MLD_sd), lwd = 0.5) +
+  theme_bw() +
+  scale_color_manual(values = getPalette(10)) +
+  theme(text = element_text(size = 20)) + 
+  xlab("Distance (km)") +
+  ylab("Mixed Layer Depth (m)") 
+
+png("figures/Figure_1.png", width = 2500, height = 3000, res = 200)
+ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1f, fig1d, fig1g,
+                  ncol = 2, nrow = 3, 
+                  common.legend = TRUE, legend = "bottom",
+                  labels="AUTO") +
   theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
 dev.off()
 
@@ -516,82 +553,45 @@ dev.off()
 # plot biomass over distance per cruise
 
 # scale nutrient to biomass data
-coeff <- 4
+coeff <- 2
 
-fig2a <- data_figures %>%
-    filter(distance > -1500) %>%
-    ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) + 
-    geom_line(lwd = 1, position = "stack") + 
-    geom_ribbon(aes(x=distance, y=c_per_uL_mean, ymin=c_per_uL_mean, ymax=c_per_uL_mean, group=pop, fill=pop), position="stack", alpha=0.5) +
-    geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
-    geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-    scale_fill_manual(values = pop_cols, name = "population") +
-    scale_color_manual(values = pop_cols, guide = "none") +
-    scale_y_continuous(name = "biomass (μgC/L)",
-      sec.axis = sec_axis( trans=~./coeff, name="DIN (µmol/L)")) +
-    facet_wrap( direction ~ cruise, ncol = 5) +
-    theme_bw(base_size = 13) +
-    theme(legend.position = "top") +
-    labs(y = "biomass (μgC/L)", x = "distance (km)")
-         
-
-
-png("figures/Figure_2a.png", width = 2500, height = 1500, res = 200)
-print(fig2a)
-dev.off()
-
-# directional
-dist_binned <- meta_gyre_d %>%
-  group_by(pop, direction,
-           distance = cut(distance, seq(d[1],d[2], by = res), 
-                          labels = seq(d[1],d[2], by = res)[-1])) %>%
-  dplyr::summarise_all(list(mean = function(x) mean(x, na.rm = TRUE), 
-                            sd = function(x) sd(x, na.rm = TRUE))) %>%
-  mutate(distance = as.numeric(as.character(distance)),
-         pop = factor(pop, levels = c(names(pop_cols)[4], names(pop_cols)[3], names(pop_cols)[2], names(pop_cols)[1]))) %>%
-  ungroup(direction)
-
-fig2b <- dist_binned %>%
-  filter(distance > -1500) %>%
-  ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) + 
-  geom_line(lwd = 1, position = "stack") + 
-  geom_ribbon(aes(x=distance, y=c_per_uL_mean, ymin=c_per_uL_mean, ymax=c_per_uL_mean, group=pop, fill=pop), position="stack", alpha=0.5) +
+fig2 <- data_figures %>%
+  ggplot(aes(distance, biomass_mean,   col = pop)) + 
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_linerange(aes(ymin = biomass_mean - biomass_sd, ymax = biomass_mean + biomass_sd), lwd = 0.5,show.legend = FALSE) + 
+  geom_line( aes(col = pop), lwd = 1, show.legend = TRUE) + 
   geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_fill_manual(values = pop_cols, name = "population") +
-  scale_color_manual(values = pop_cols, guide = "none") +
-  scale_y_continuous(name = "biomass (μgC/L)",
-                     sec.axis = sec_axis( trans=~./coeff, name="DIN (µmol/L)")) +
-  facet_wrap(~ direction, ncol = 3) +
+  scale_color_manual(values = pop_cols, name = "population") +
+  scale_y_continuous(name = expression(paste("Biomass (µgC L"^{-1},")")),
+                     sec.axis = sec_axis(transform =~./coeff, 
+                                         name = expression(paste("DIN (µmol L"^{-1},")")))) +
+  facet_wrap(. ~ label, ncol = 5) +
   theme_bw(base_size = 13) +
   theme(legend.position = "top") +
-  labs(y = "biomass (μgC/L)", x = "distance (km)")
+  xlab("Distance (km)")
 
-png("figures/Figure_2b.png", width = 2500, height = 1500, res = 200)
-print(fig2b)
+
+
+png("figures/Figure_2.png", width = 2500, height = 1500, res = 200)
+print(fig2)
 dev.off()
 
-png("figures/Figure_2.png", width = 2500, height = 2500, res = 200)
-ggpubr::ggarrange(fig2a, fig2b, ncol = 1, nrow = 2, 
-                  common.legend = TRUE, labels="auto") +
-  theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
-dev.off()
+
 
 
 ### FIGURE 3
 # Cellular Growth
 
 fig3 <- data_figures %>%
-  filter(distance > -1500) %>%
-  filter(pop == "Prochlorococcus" | pop == "Synechococcus") %>%
+  #filter(pop == "Prochlorococcus" | pop == "Synechococcus") %>%
   drop_na(daily_growth_mean) %>%
   ggplot(aes(distance, daily_growth_mean, group = pop)) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = daily_growth_mean - daily_growth_sd -  mean(daily_growth_sd, na.rm = TRUE), 
                      ymax = daily_growth_mean + daily_growth_sd +  mean(daily_growth_sd, na.rm = TRUE), col = pop), lwd= 0.5, show.legend = FALSE) +
   geom_line(aes(col= pop), lwd= 1, show.legend = TRUE) +
   scale_color_manual(values = pop_cols, name = "population") +
-  facet_wrap(direction ~ cruise, ncol = 5) +
+  facet_wrap(. ~ label, ncol = 5) +
   theme_bw(base_size = 13) +
   theme(legend.position = "top") +
   labs(y = "Net cellular growth (1/d)", x = "Distance (km)")
@@ -601,155 +601,145 @@ print(fig3)
 dev.off()
 
 
-#directional
-fig3dir <- data_figures %>%
-  filter(distance > -1500) %>%
-  drop_na(daily_growth_mean) %>%
-  ggplot(aes(distance, daily_growth_mean, group = pop)) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  geom_smooth(aes(col= pop), lwd= 1, show.legend = TRUE) +
-  scale_color_manual(values = pop_cols, name = "population") +
-  facet_wrap(~direction, ncol = 3) +
-  theme_bw(base_size = 13) +
-  theme(legend.position = "top") +
-  labs(y = "Net cellular growth (1/d)", x = "Distance (km)")
-
-
-
 
 ### FIGURE 4
 # correlation plot
 
-# directional
-corr_data_north <- data_figures %>% 
-  # if we want direction
-  filter(direction == "north") %>%
-  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
-  #na.omit() %>% 
-  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
 
-colnames(corr_data_north) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                         "biomass Pro", "biomass Syn",
-                         "biomass nano", "biomass pico",
-                         "diameter Pro", "diameter Syn",
-                         "diameter nano", "diameter pico",
-                         "growth rate Pro", "growth rate Syn",
-                         "growth rate nano", "growth rate pico")
+# Function to process data for each direction
+cols_to_keep <- c("light", "salinity", "temperature", "phosphate", "nitrate",
+                  "growth Pro", "growth Syn",
+                  "biomass Pro", "biomass Syn", "biomass nano", "biomass pico")
+  
+cor_all <-  meta_gyre_d  %>%
+    select(pop, c_per_uL, diam, daily_growth, PO4, NO3_NO2, salinity, temp, daily_par) %>%
+    pivot_wider(names_from = pop, values_from = c(c_per_uL, diam, daily_growth), values_fn = mean) %>%
+    setNames(c("phosphate", "nitrate","salinity", "temperature", "light",
+               "biomass Pro", "biomass Syn", "biomass nano", "biomass pico",
+               "diam Pro", "diam Syn", "diam nano", "diam pico",
+               "growth Pro", "growth Syn", "growth nano", "growth pico")) %>%
+    select(all_of(cols_to_keep)) %>% {
+      corr_data <- .
+      cor_all <- cor(corr_data, use = "complete.obs")
+      cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
+      
+      # Adjust for multiple comparisons
+      pAdj <- p.adjust(c(cor_all_p[[1]]), method = "BH")
+      resAdj <- matrix(pAdj, ncol = dim(cor_all_p[[1]])[1])
+      dimnames(resAdj) <- dimnames(cor_all_p$p)
+      
+      list(cor_matrix = cor_all, p_adj_matrix = resAdj)
+    }
 
-corr_data_north <- corr_data_north[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                          "biomass Pro", "biomass Syn",
-                          "biomass nano", "biomass pico",
-                          "diameter Pro", "diameter Syn",
-                          "growth rate Pro", "growth rate Syn")]
 
-cor_all_north <- cor(corr_data_north, use = "complete.obs")
-cor_all_p_north <- cor.mtest(corr_data_north, use = "complete.obs", conf.level = .99)
 
-# adjust for multiple comparisons
-pAdj_north <- p.adjust(c(cor_all_p_north[[1]]), method = "BH")
-resAdj_north <- matrix(pAdj_north, ncol = dim(cor_all_p_north[[1]])[1])
-dimnames(resAdj_north) <- dimnames(cor_all_p_north$p)
 
-corr_data_east <- data_figures %>% 
-  # if we want direction
-  filter(direction == "east") %>%
-  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
-  #na.omit() %>% 
-  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
 
-colnames(corr_data_east) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                               "biomass Pro", "biomass Syn",
-                               "biomass nano", "biomass pico",
-                               "diameter Pro", "diameter Syn",
-                               "diameter nano", "diameter pico",
-                               "growth rate Pro", "growth rate Syn",
-                               "growth rate nano", "growth rate pico")
+colors <- colorRampPalette(c("blue2", "grey90", "red2"))(200)
 
-corr_data_east <- corr_data_east[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                                      "biomass Pro", "biomass Syn",
-                                      "biomass nano", "biomass pico",
-                                      "diameter Pro", "diameter Syn",
-                                      "growth rate Pro", "growth rate Syn")]
+png("figures/Figure_4.png", width = 1200, height = 1200, res = 200)
+par(mfrow=c(1,1))
 
-cor_all_east <- cor(corr_data_east, use = "complete.obs")
-cor_all_p_east <- cor.mtest(corr_data_east, use = "complete.obs", conf.level = .99)
+corrplot(cor_all$cor_matrix, p.mat = cor_all$p_adj_matrix, 
+         sig.level = 0.01, insig = "blank",
+         diag = F,
+         type = "lower", method = "color", addgrid.col = F, tl.col = "black", col = colors)
 
-# adjust for multiple comparisons
-pAdj_east <- p.adjust(c(cor_all_p_east[[1]]), method = "BH")
-resAdj_east <- matrix(pAdj_east, ncol = dim(cor_all_p_east[[1]])[1])
-dimnames(resAdj_east) <- dimnames(cor_all_p_east$p)
 
-corr_data_south <- data_figures %>% 
-  # if we want direction
-  filter(direction == "south") %>%
-  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
-  #na.omit() %>% 
-  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
 
-colnames(corr_data_south) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                               "biomass Pro", "biomass Syn",
-                               "biomass nano", "biomass pico",
-                               "diameter Pro", "diameter Syn",
-                               "diameter nano", "diameter pico",
-                               "growth rate Pro", "growth rate Syn",
-                               "growth rate nano", "growth rate pico")
+dev.off()
 
-corr_data_south <- corr_data_south[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                                      "biomass Pro", "biomass Syn",
-                                      "biomass nano", "biomass pico",
-                                      "diameter Pro", "diameter Syn",
-                                      "growth rate Pro", "growth rate Syn")]
 
-cor_all_south <- cor(corr_data_south, use = "complete.obs")
-cor_all_p_south <- cor.mtest(corr_data_south, use = "complete.obs", conf.level = .99)
 
-# adjust for multiple comparisons
-pAdj_south <- p.adjust(c(cor_all_p_south[[1]]), method = "BH")
-resAdj_south <- matrix(pAdj_south, ncol = dim(cor_all_p_south[[1]])[1])
-dimnames(resAdj_south) <- dimnames(cor_all_p_south$p)
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Function to process data for each direction
+process_corr_data <- function(data, direction) {
+  cols_to_keep <- c("light", "salinity", "temperature", "phosphate", "nitrate",
+                    "growth Pro", "growth Syn",
+                    "biomass Pro", "biomass Syn", "biomass nano", "biomass pico")
+  
+  meta_gyre_d  %>%
+    filter(direction == {{ direction }}) %>%
+    select(pop, c_per_uL, diam, daily_growth, PO4, NO3_NO2, salinity, temp, daily_par) %>%
+    pivot_wider(names_from = pop, values_from = c(c_per_uL, diam, daily_growth), values_fn = mean) %>%
+    setNames(c("phosphate", "nitrate","salinity", "temperature", "light",
+               "biomass Pro", "biomass Syn", "biomass nano", "biomass pico",
+               "diam Pro", "diam Syn", "diam nano", "diam pico",
+               "growth Pro", "growth Syn", "growth nano", "growth pico")) %>%
+    select(all_of(cols_to_keep)) %>% {
+      corr_data <- .
+      cor_all <- cor(corr_data, use = "complete.obs")
+      cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
+      
+      # Adjust for multiple comparisons
+      pAdj <- p.adjust(c(cor_all_p[[1]]), method = "BH")
+      resAdj <- matrix(pAdj, ncol = dim(cor_all_p[[1]])[1])
+      dimnames(resAdj) <- dimnames(cor_all_p$p)
+      
+      list(cor_matrix = cor_all, p_adj_matrix = resAdj)
+    }
+}
+
+# Process data for each direction
+cor_all_north <- process_corr_data(data_figures, "North")
+cor_all_east <- process_corr_data(data_figures, "East")
+cor_all_south <- process_corr_data(data_figures, "South")
+
+
+
+colors <- colorRampPalette(c("blue2", "grey90","red2"))(200)
 
 png("figures/Figure_4.png", width = 2600, height = 1200, res = 200)
+
 par(mfrow=c(1,3))
-fig_cor_north <- corrplot(cor_all_north, p.mat = resAdj_north, sig.level = 0.01, insig = "blank",
-                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
-                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
+# North plot
+corrplot(cor_all_north$cor_matrix, p.mat = cor_all_north$p_adj_matrix, 
+         sig.level = 0.01, insig = "blank",
+         diag = F,
+         type = "lower", method = "color", addgrid.col = F, tl.col = "black", col = colors)
 mtext("North", at=7, line = -38, cex=1)
 mtext("a", at=-1, line = -2, cex=1, font=2)
-fig_cor_east <- corrplot(cor_all_east, p.mat = resAdj_east, sig.level = 0.01, insig = "blank",
-                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
-                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
+
+# East plot
+corrplot(cor_all_east$cor_matrix, p.mat = cor_all_east$p_adj_matrix, 
+         sig.level = 0.01, insig = "blank",
+         diag = F,
+         type = "lower", method = "color", addgrid.col = F, tl.col = "black", col = colors)
 mtext("East", at=7, line = -38, cex=1)
 mtext("b", at=-1, line = -2, cex=1, font=2)
-fig_cor_south <- corrplot(cor_all_south, p.mat = resAdj_south, sig.level = 0.01, insig = "blank",
-                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
-                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
+
+# South plot
+corrplot(cor_all_south$cor_matrix, p.mat = cor_all_south$p_adj_matrix, 
+         sig.level = 0.01, insig = "blank",
+         diag = F,
+         type = "lower", method = "color", addgrid.col = F, tl.col = "black", col = colors)
 mtext("South", at=7, line = -38, cex=1)
 mtext("c", at=-1, line = -2, cex=1, font=2)
+
 dev.off()
+
+
+
+
+
+
 
 
 #------------------------
 # d. Supplemental Figures 
 #------------------------
-
-sal <- data_figures %>%
-  filter(distance > -1500) %>%
-  ggplot(aes(distance, salinity_mean, color = cruise)) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.1, inherit.aes = FALSE) +
-  geom_point(size = 2,  show.legend = T) +
-  geom_line(aes(col = cruise), lwd = 2) +
-  geom_linerange(aes(ymin = salinity_mean - salinity_sd, ymax = salinity_mean + salinity_sd), lwd = 0.5) +
-  theme_bw() +
-  scale_color_manual(values = getPalette(10)) +
-  theme(text = element_text(size = 20)) + 
-  xlab("Distance (km)") +
-  ylab("Salinity (PSU)")
-
-png("figures/Figure_salinity.png", width = 2500, height = 2500, res = 200)
-ggpubr::ggarrange(sal, ncol = 1, nrow = 1, 
-                  labels="auto") +
-  theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
-dev.off()
 
 abund_pro <- data_figures %>%
      filter(distance > -1500 & pop == "Prochlorococcus") %>%
@@ -820,242 +810,5 @@ png("figures/Figure_diameter.png", width = 2500, height = 2500, res = 200)
 ggpubr::ggarrange(cellsizepro, cellsizepico, ncol = 1, nrow = 2, 
                   labels="auto") +
   theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
-dev.off()
-
-
-# heterotrophic bacterial abundance or biomass from CMAP for each cruise
-grad4 <- read.csv("~/Downloads/Discrete Flow Cytometry of Depth Profile Samples from the Gradients 4 (2021) Cruise Using a BD Influ/Influx_Stations_Gradients_2021v1_1.csv")
-plotgrad4 <- grad4 %>%
-  ggplot() +
-  geom_point(aes(lon, lat, color = carbon_biomass_bacteria), size=4) +
-  coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
-  borders("world", colour = "black", fill = "gray80") +
-  theme_bw() +
-  scale_color_gradientn(colors=plasma(10)) +
-  theme(text = element_text(size = 20)) + 
-  xlab("Longitude (ºW)") +
-  ylab("Latitude (ºN)") +
-  labs(color="Bacterial Biomass (μgC/L)") +
-  ggtitle("TN397")
-
-grad1 <- read.csv("~/Downloads/Discrete flow cytometry from the Gradients 2016 cruise using a BD Influx Cell Sorter/Influx_Stations_Gradients_2016.csv")
-plotgrad1 <- grad1 %>%
-  ggplot() +
-  geom_point(aes(lon, lat, color = biomass_bacteria), size=4) +
-  coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
-  borders("world", colour = "black", fill = "gray80") +
-  theme_bw() +
-  scale_color_gradientn(colors=plasma(10)) +
-  theme(text = element_text(size = 20)) + 
-  xlab("Longitude (ºW)") +
-  ylab("Latitude (ºN)") +
-  labs(color="Bacterial Biomass (μgC/L)") +
-  ggtitle("KOK1606")
-
-png("figures/Figure_bact_biomass.png", width = 2500, height = 2500, res = 200)
-ggpubr::ggarrange(plotgrad1, plotgrad4, ncol = 1, nrow = 2, 
-                  labels="auto") +
-  theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
-dev.off()
-
-
-#### UNCHECKED CODE
-
-#------------------------
-# d. Supplemental Figures 
-#------------------------
-
-# corrplot of all directions
-corr_data <- data_figures %>% 
-  # if we want direction
-  filter(direction == "south") %>%
-  select(pop, c_per_uL_mean, diam_mean, daily_growth_mean, PO4_mean, NO3_NO2_mean, salinity_mean, temp_mean, daily_par_mean) %>%
-  #na.omit() %>% 
-  pivot_wider(names_from = pop, values_from = c(c_per_uL_mean, diam_mean, daily_growth_mean))
-
-colnames(corr_data) <- c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                         "biomass Pro", "biomass Syn",
-                         "biomass nano", "biomass pico",
-                         "diameter Pro", "diameter Syn",
-                         "diameter nano", "diameter pico",
-                         "growth rate Pro", "growth rate Syn",
-                         "growth rate nano", "growth rate pico")
-
-corr_data <- corr_data[,c("phosphate", "nitrate", "salinity", "temperature", "daily par",
-                          "biomass Pro", "biomass Syn",
-                          "biomass nano", "biomass pico",
-                          "diameter Pro", "diameter Syn",
-                          "growth rate Pro", "growth rate Syn")]
-
-cor_all <- cor(corr_data, use = "complete.obs")
-cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
-
-# adjust for multiple comparisons
-pAdj <- p.adjust(c(cor_all_p[[1]]), method = "BH")
-resAdj <- matrix(pAdj, ncol = dim(cor_all_p[[1]])[1])
-dimnames(resAdj) <- dimnames(cor_all_p$p)
-
-png("figures/Figure_4.png", width = 2500, height = 1600, res = 200)
-fig_cor <- corrplot(cor_all, p.mat = resAdj, sig.level = 0.01, insig = "blank",
-                    type = "lower", method = "color", addgrid.col = F, tl.col = "black",
-                    col = colorRampPalette(c("blue", "grey90", "red"))(200))
-dev.off()
-
-
-# alternate form of fig2
-fig2b <- data_figures %>%
-  filter(distance > -1500) %>%
-  ggplot(aes(distance, c_per_uL_mean,  col = pop, fill = pop)) +
-  geom_line(lwd = 1, position = "fill") +
-  geom_area(position = "fill",alpha = 0.5) +
-  #geom_point(aes(distance, din), col = 1, pch = 1, size = 3, show.legend = FALSE) + 
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_fill_manual(values = pop_cols, name = "population") +
-  scale_color_manual(values = pop_cols, guide = "none") +
-  scale_y_continuous(name = "contribution") +
-  facet_wrap(direction ~ cruise, ncol = 5) +
-  theme_bw(base_size = 13) +
-  theme(legend.position = "top") +
-  labs(y = "biomass (μgC/L)", x = "distance (km)")
-
-# png("figures/Figure_2.png", width = 3500, height = 3200, res = 200)
-# ggpubr::ggarrange(fig2a, fig2b, nrow = 2, common.legend = TRUE)
-# dev.off()
-
-# alternate form of fig 3
-fig3 <- data_figures %>%
-  filter(distance > -1500) %>%
-  ggplot(aes(distance, qc_mean,  col = pop, fill = pop)) +
-  geom_line(aes(group = pop), lwd = 1) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = 0.02, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_color_manual(values = pop_cols, name = "population") +
-  scale_y_continuous(trans='log10') +
-  facet_wrap(. ~ cruise) +
-  theme_bw(base_size = 20) +
-  labs(y = "carbon quota (pg C/cell)", x = "distance (km)")
-
-# nutrients
-data_nutr <- data_figures[, c("cruise", "pop", "distance", "NO3_NO2_mean", "PO4_mean")]
-data_nutr <- data_nutr %>%
-  dplyr::rename(NO3_NO2 = NO3_NO2_mean, PO4 = PO4_mean) %>%
-  gather(nutrient, concentration, 4:5)
-data_nutr$modeled <- "modeled"
-actual <- which(data_nutr$cruise == "KOK1606" | 
-                  data_nutr$cruise == "MGL1704" | 
-                  data_nutr$cruise == "KM1906" | 
-                  data_nutr$cruise == "TN398")
-data_nutr$modeled[actual] <- "observed"
-ind_nutr <- which(data_nutr$cruise == "KM1923" & data_nutr$distance > 1750)
-data_nutr <- data_nutr[-ind_nutr,]
-
-nutrient_names <- list("NO3_NO2" = "nitrate", "PO4" = "phosphate")
-nutrient_labeller <- function(variable, value){
-  return(nutrient_names[value])
-}
-
-
-fig_nutr <- data_nutr %>%
-  ggplot(aes(distance, concentration, col = cruise, shape = modeled)) + 
-  geom_point(size = 2) +
-  scale_color_manual(values=viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) +
-  theme_bw(base_size = 15) +
-  facet_wrap(. ~ nutrient, scale = "free", labeller=nutrient_labeller) +
-  labs(y = "nutrient concentration (μg / L)", x = "distance (km)")
-
-png(paste0("figures/", "nutr-cruise.png"), width = 2500, height = 1200, res = 200)
-print(fig_nutr)
-dev.off()
-
-
-
-### plotting nutrients against phytoplankton diameter
-din <- data_figures %>%
-  select(cruise, pop, distance, contains('NO3')) %>%
-  rename(mean = contains("mean")) %>%
-  filter(!is.na(mean)) %>%
-  ggplot(aes(distance, mean,  col = cruise)) + 
-  geom_rect(aes(xmin = mean(front_uncertainties$down), xmax = mean(front_uncertainties$up), ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "grey") +
-  geom_point(aes(group = cruise)) +
-  #geom_line(aes(group = cruise), lwd = 0.5) +
-  theme_bw(base_size = 20) +
-  labs(y = "Nitrate and Nitrite (μmol/L)", x = "distance (km)")
-
-
-### Temp, nitrate, PAR
-temp <- data_figures %>%
-  select(cruise, pop, distance, contains('temp')) %>%
-  rename(mean = contains("mean")) %>%
-  filter(!is.na(mean)) %>%
-  ggplot(aes(distance, mean,  col = cruise)) + 
-  geom_rect(aes(xmin = mean(front_uncertainties$down), xmax = mean(front_uncertainties$up), ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "grey") +
-  geom_point(aes(group = cruise)) +
-  geom_line(aes(group = cruise), lwd = 0.5) +
-  theme_bw(base_size = 20) +
-  labs(y = "Temperature (ºC)", x = "distance (km)")
-
-par <- data_figures %>%
-  select(cruise, pop, distance, contains('daily_par')) %>%
-  rename(mean = contains("mean")) %>%
-  filter(!is.na(mean)) %>%
-  ggplot(aes(distance, mean,  col = cruise)) + 
-  geom_rect(aes(xmin = mean(front_uncertainties$down), xmax = mean(front_uncertainties$up), ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "grey") +
-  geom_point(aes(group = cruise)) +
-  geom_line(aes(group = cruise), lwd = 0.5) +
-  theme_bw(base_size = 20) +
-  labs(y = "daily PAR (µE m-2)", x = "distance (km)")
-
-
-png(paste0("figures/Figure_3.png"), width = 3500, height = 1600, res = 200)
-ggpubr::ggarrange(temp, par, din, nrow = 1, common.legend = TRUE)
-dev.off()
-
-
-### growth rate
-
-fig4 <- data_figures %>%
-  filter(distance > -1500) %>%
-  filter(!is.na(daily_growth_mean)) %>%
-  ggplot(aes(distance, daily_growth_mean,  col = pop, fill = pop)) +
-  geom_line(aes(group = pop), lwd = 1) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  scale_color_manual(values = pop_cols, name = "population") +
-  facet_wrap(. ~ cruise) +
-  theme_bw(base_size = 20) +
-  labs(y = "growth rate", x = "distance (km)")
-
-png(paste0("figures/","Figure_4.png"), width = 2500, height = 2000, res = 200)
-print(fig4)
-dev.off()
-
-### MLD
-data_figures$Month <- lubridate::month(data_figures$date_mean)
-
-fig_mld <- data_figures %>%
-  ggplot(aes(distance, MLD_mean,  col = as.factor(Month))) +
-  geom_point(aes(group = pop), size = 2) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  facet_wrap(. ~ cruise) +
-  theme_bw(base_size = 20) +
-  labs(y = "mixed layer depth (m)", x = "distance (km)") +
-  scale_y_reverse() +
-  scale_color_discrete()
-
-png(paste0("figures/","mld_seasonally.png"), width = 2500, height = 2000, res = 200)
-print(fig_mld)
-dev.off()
-
-### MLD and NO3
-data_figures$MLD_NO3 <- data_figures$MLD_mean * data_figures$NO3_NO2_mean
-
-fig_mld_no3 <- data_figures %>%
-  ggplot(aes(distance, MLD_NO3)) +
-  geom_point(aes(group = pop), size = 2) +
-  geom_rect(data = front_uncertainties, aes(xmin = down, xmax = up, ymin = -Inf, ymax = Inf), alpha= 0.25, inherit.aes = FALSE) +
-  facet_wrap(. ~ cruise) +
-  theme_bw(base_size = 20) +
-  labs(y = "MLD * DIN", x = "distance (km)")
-
-png(paste0("figures/","mld_no3.png"), width = 2500, height = 2000, res = 200)
-print(fig_mld_no3)
 dev.off()
 
