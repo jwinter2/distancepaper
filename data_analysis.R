@@ -107,11 +107,11 @@ seaflow <- seaflow_psd %>%
 decomp <-  function(data, day = 3){
   #print(unique(data[,"cruise"]))
   time <- unlist(list(zoo::rollapply(data[,"date"], width=24*day, function(x) unique(x), by.column = F)))
-  diel <- unlist(list(zoo::rollapply(data[,"qc"], width=24*day, function(x) decompose(ts(x, frequency=24), type="mult")$seasonal, by.column= F))) -1
-  quotas <- unlist(list(zoo::rollapply(data[,"qc"], width=24*day, function(x) decompose(ts(x, frequency=24), type="mult")$trend, by.column= F))) -1
-  biomass <- unlist(list(zoo::rollapply(data[,"c_per_uL"], width=24*day, function(x) decompose(ts(x, frequency=24), type="mult")$trend, by.column= F))) -1
-  abundance <- unlist(list(zoo::rollapply(data[,"n_per_uL"], width=24*day, function(x) decompose(ts(x, frequency=24), type="mult")$trend, by.column= F))) -1
-  diameter <- unlist(list(zoo::rollapply(data[,"diam"], width=24*day, function(x) decompose(ts(x, frequency=24), type="mult")$trend, by.column= F))) -1
+  diel <- unlist(list(zoo::rollapply(data[,"qc"], width=24*day, function(x) decompose(ts(x, frequency=24), type="multiplicative")$seasonal, by.column= F))) -1
+  quotas <- unlist(list(zoo::rollapply(data[,"qc"], width=24*day, function(x) decompose(ts(x, frequency=24), type="multiplicative")$trend, by.column= F)))
+  biomass <- unlist(list(zoo::rollapply(data[,"c_per_uL"], width=24*day, function(x) decompose(ts(x, frequency=24), type="multiplicative")$trend, by.column= F)))
+  abundance <- unlist(list(zoo::rollapply(data[,"n_per_uL"], width=24*day, function(x) decompose(ts(x, frequency=24), type="multiplicative")$trend, by.column= F)))
+  diameter <- unlist(list(zoo::rollapply(data[,"diam"], width=24*day, function(x) decompose(ts(x, frequency=24), type="multiplicative")$trend, by.column= F)))
   ts <- tibble(time, diel, quotas, biomass, abundance, diameter) %>%
     group_by(time) %>%
     summarize_all(function(x) mean(x, na.rm = T)) %>%
@@ -375,44 +375,77 @@ pop_cols <- c("Prochlorococcus" = rocket(7)[6], "Synechococcus" = rocket(7)[4], 
 
 ### Calculate mean and sd over binned distance from the edges of the NPSG
 
-binning <- 100 # kilometers 
+binning <- 100 # kilometers 
+
+# Create a complete set of distance bins based on the chosen binning and distance range
+all_distance_bins <- seq(-1000, 2000, by = binning)[-1]
 
 data_figures <- meta_gyre_d  %>%
-   group_by(cruise, pop, gyre, direction, season, label, distance = cut(distance, seq(-1000, 2000, by = binning), 
-      labels = seq(-1000, 2000, by = binning)[-1]), .drop = T) %>%
-  dplyr::summarise_all(list(mean = function(x) mean(x, na.rm = TRUE), 
-    sd = function(x) sd(x, na.rm = TRUE))) %>%
-  mutate(distance = as.numeric(as.character(distance)),
-         cruise = factor(cruise, levels = c("KOK1606","MGL1704","KM1906","KM1712","KM1713","KM1923","TN397b","TN397c", "TN397a","TN398")),
-         label = factor(label, levels = c("KOK1606\n(North/Spring)","MGL1704\n(North/Spring)","KM1906\n(North/Spring)","KM1712\n(North/Summer)","KM1713\n(North/Summer)","KM1923\n(South/Fall)","TN397b\n(South/Fall)","TN397c\n(South/Fall)", "TN397a\n(East/Fall)","TN398\n(East/Winter)")),
-         pop = factor(pop, levels = c(names(pop_cols)[4], names(pop_cols)[3], names(pop_cols)[2], names(pop_cols)[1]))) %>%
+
+  # Group by including distance_bin
+  group_by(cruise, pop, gyre, direction, season, label, 
+           distance = cut(distance, seq(-1000, 2000, by = binning), 
+                          labels = seq(-1000, 2000, by = binning)[-1])) %>%
+  
+  # Summarize data within bins
+  dplyr::summarise_all(list(mean = function(x) mean(x, na.rm = TRUE),
+                            sd = function(x) sd(x, na.rm = TRUE))) %>%
+  mutate(distance = as.numeric(as.character(distance))) %>%
+  filter(!is.na(distance)) %>%
+  # add 0 values when Prochlorococcus is absent
+  group_by(cruise, gyre, direction, season, label) %>% # Additional grouping for Prochlorococcus
+  mutate(biomass_mean = ifelse(pop == "Prochlorococcus", 
+                               coalesce(biomass_mean, 0), # Fill missing with 0 for Prochlorococcus
+                               biomass_mean)) %>%  # Keep other populations as is
   ungroup()
+
 
 ### uncertainties in front location due to binning
 meta_gyre_d <- meta_gyre_d %>%
   mutate(gyre = case_when(
-    abs(distance) < binning ~ "transition",
-    TRUE ~ gyre))
-data_figures <-data_figures %>%
+    abs(distance) < binning ~ "Transition",
+    TRUE ~ gyre)) %>%
+  mutate(cruise = factor(cruise, levels = c("KOK1606","MGL1704","KM1906","KM1712","KM1713","KM1923","TN397b","TN397c", "TN397a","TN398")),
+         label = factor(label, levels = c("KOK1606\n(North/Spring)","MGL1704\n(North/Spring)","KM1906\n(North/Spring)","KM1712\n(North/Summer)","KM1713\n(North/Summer)","KM1923\n(South/Fall)","TN397b\n(South/Fall)","TN397c\n(South/Fall)", "TN397a\n(East/Fall)","TN398\n(East/Winter)")),
+         pop = factor(pop, levels = c(names(pop_cols)[4], names(pop_cols)[3], names(pop_cols)[2], names(pop_cols)[1])))
+  
+data_figures <- data_figures %>%
   mutate(gyre = case_when(
-    abs(distance) < binning ~ "transition",
-    TRUE ~ gyre))
+    abs(distance) < binning ~ "Transition",
+    TRUE ~ gyre)) %>%
+  mutate(cruise = factor(cruise, levels = c("KOK1606","MGL1704","KM1906","KM1712","KM1713","KM1923","TN397b","TN397c", "TN397a","TN398")),
+         label = factor(label, levels = c("KOK1606\n(North/Spring)","MGL1704\n(North/Spring)","KM1906\n(North/Spring)","KM1712\n(North/Summer)","KM1713\n(North/Summer)","KM1923\n(South/Fall)","TN397b\n(South/Fall)","TN397c\n(South/Fall)", "TN397a\n(East/Fall)","TN398\n(East/Winter)")),
+         pop = factor(pop, levels = c(names(pop_cols)[4], names(pop_cols)[3], names(pop_cols)[2], names(pop_cols)[1])))
+  
 
 # plot cruise tracks
 # plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>%  layout(geo = geo)
 
 
 
-# get proportion stats
-prop <- data_figures %>% 
-        group_by(distance, cruise, season) %>% 
-        reframe(sum = sum(c_per_uL_mean))
-prop <- merge(data_figures, prop)
-prop <- prop %>% 
-       group_by(pop, distance, cruise, season) %>% 
-       reframe(prop_c = c_per_uL_mean / sum)
+meta_gyre_d %>%
+  filter(pop == "Prochlorococcus") %>%
+  #filter(gyre != "Transition") %>%
+  #filter(direction == "North") %>%
+  #group_by(season, gyre) %>%
+  summarize(max = max(growth, na.rm = TRUE),
+            mean = mean(growth, na.rm = TRUE),
+            sd = sd(growth, na.rm = TRUE))
 
 
+o <- meta_gyre_d %>%
+  filter(pop == "Synechococcus") %>%
+  filter(gyre == "outside") %>%
+  #filter(direction == "North"| direction == "South") %>%
+  select(growth)
+
+i <- meta_gyre_d %>%
+  filter(pop == "Synechococcus") %>%
+  filter(gyre == "inside") %>%
+ # filter(direction == "North"| direction == "South") %>%
+  select(growth)
+
+t.test(o, i, paired = FALSE, alternative = "less", conf.level = 0.99)
 
 
 #----------------
@@ -554,23 +587,24 @@ dev.off()
 # plot biomass over distance per cruise
 
 # scale nutrient to biomass data
-coeff <- 2
+coeff <- 4
 
 fig2 <- data_figures %>%
-  ggplot(aes(distance, biomass_mean,   col = pop)) + 
+  ggplot(aes(distance, biomass_mean, col = pop)) + 
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = biomass_mean - biomass_sd, ymax = biomass_mean + biomass_sd), lwd = 0.5,show.legend = FALSE) + 
-  geom_line( aes(col = pop), lwd = 1, show.legend = TRUE) + 
+  geom_ribbon(aes(ymin = biomass_mean - biomass_sd, ymax = biomass_mean + biomass_sd, fill = pop), alpha = 0.5, show.legend = FALSE, position = "stack") +
+  #geom_linerange(aes(ymin = biomass_mean - biomass_sd, ymax = biomass_mean + biomass_sd), lwd = 0.5,show.legend = FALSE) + 
+  #geom_line(aes(col = pop), lwd = 1, show.legend = TRUE, position = "stack") + 
   geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
   scale_color_manual(values = pop_cols, name = "Population") +
+  scale_fill_manual(values = pop_cols, name = "Population") +
   scale_y_continuous(name = expression(paste("Biomass (µgC L"^{-1},")")),
                      sec.axis = sec_axis(transform =~./coeff, 
                                          name = expression(paste("DIN (µmol L"^{-1},")")))) +
   facet_wrap(. ~ label, ncol = 5) +
   theme_bw(base_size = 13) +
   theme(legend.position = "top") +
-  xlab("Distance (km)")
-
+  xlab("Distance (km)") 
 
 
 png("figures/Figure_2.png", width = 2500, height = 1500, res = 200)
@@ -594,7 +628,7 @@ fig3 <- data_figures %>%
   facet_wrap(. ~ label, ncol = 5) +
   theme_bw(base_size = 13) +
   theme(legend.position = "top") +
-  labs(y = "Net cellular growth (1/d)", x = "Distance (km)")
+  labs(y = expression(paste("Net Cellular Growth (d"^{-1},")")), x = "Distance (km)")
 
 png("figures/Figure_3.png", width = 2500, height = 1500, res = 200)
 print(fig3)
@@ -608,9 +642,12 @@ dev.off()
 
 # Function to process data for each direction
 cor_all <-  meta_gyre_d  %>%
-    select(pop, biomass, growth, PO4, NO3_NO2, salinity, temp, light) %>%
-    pivot_wider(names_from = pop, values_from = c(biomass, growth), values_fn = mean) %>%
-    {
+  mutate(pop = factor(pop, levels = c(names(pop_cols)[1], names(pop_cols)[2], names(pop_cols)[3], names(pop_cols)[4]))) %>%
+  arrange(pop) %>%
+  rename(DIN = NO3_NO2, DIP = PO4, temperature = temp) %>%
+  select(pop, growth, biomass, temperature,DIN, DIP) %>%
+  pivot_wider(names_from = pop, values_from = c(growth, biomass), values_fn = mean) %>%
+      {
       corr_data <- .
       cor_all <- cor(corr_data, use = "complete.obs")
       cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
@@ -630,10 +667,10 @@ cor_all <-  meta_gyre_d  %>%
 colors <- colorRampPalette(c("blue2", "grey90", "red2"))(200)
 
 png("figures/Figure_4.png", width = 1500, height = 1500, res = 200)
-par(mfrow=c(1,1))
 
+par(mfrow=c(1,1))
 corrplot(cor_all$cor_matrix, p.mat = cor_all$p_adj_matrix, 
-         sig.level = 0.01, insig = "blank",
+         sig.level = 0.001, insig = "blank",
          diag = F,
          type = "lower", method = "color", addgrid.col = F, tl.col = "black", col = colors)
 
