@@ -6,7 +6,11 @@ library(plotly)
 library(viridis)
 library(dplyr)
 library(corrplot)
-
+my_theme <- theme_bw() + 
+         theme(legend.position = "bottom",
+               panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank())
+  
 #-----------------
 # For plotting map
 #-----------------
@@ -45,61 +49,71 @@ setwd("/Users/ribalet/Documents/Codes/distancepaper")
 #-------------------
 # Environmental data
 #-------------------
-env <- read_csv("data/EnvironmentalData.csv") %>% arrange(date)
-env$date <- as.POSIXct(env$date, format = "%m/%d/%y %H:%M", tz = "GMT")
+# env <- read_csv("data/EnvironmentalData_2022-05-22.csv") %>% arrange(date)
+# env$date <- as.POSIXct(env$date, format = "%m/%d/%y %H:%M", tz = "GMT")
+# 
+# ### Clean-up data
+# # salinity and Temperature (due to freshwater contamination in ships' seawater supply)
+# env <- env %>%
+#   group_by(cruise) %>%
+#   mutate(
+#     salinity = case_when(salinity < 32 ~ NaN,
+#                          date < as.Date("2017-06-05") & cruise == "Gradients 2" ~ NaN, # contaminated salinity during first half the cruise
+#                          c(abs(diff(salinity)),0) > 0.5 ~ NaN, # sporadic drops in salinity during TN271 cruise
+#                          TRUE ~ salinity),
+#     temp = case_when(temp > 32 ~ NaN,
+#                      TRUE ~ temp))
+# 
+# # calculate daily-averaged par
+# env <- env %>%
+#   group_by(days = lubridate::floor_date(date, unit = "days")) %>%
+#   mutate(light = mean(par)) %>%
+#   ungroup() %>%
+#   select(!days)
+# 
+# 
+# write_csv(env, "data/EnvironmentalData.csv")
+env <- read_csv("data/EnvironmentalData.csv")
 
-### Clean-up data
-# salinity and Temperature (due to freshwater contamination in ships' seawater supply)
-env <- env %>%
-  group_by(cruise) %>%
-  mutate(
-    salinity = case_when(salinity < 32 ~ NaN,
-                         date < as.Date("2017-06-05") & cruise == "Gradients 2" ~ NaN, # contaminated salinity during first half the cruise
-                         c(abs(diff(salinity)),0) > 0.5 ~ NaN, # sporadic drops in salinity during TN271 cruise
-                         TRUE ~ salinity),
-    temp = case_when(temp > 32 ~ NaN,
-                     TRUE ~ temp))
-
-# calculate daily-averaged par
-env <- env %>%
-  group_by(days = lubridate::floor_date(date, unit = "days")) %>%
-  mutate(light = mean(par)) %>%
-  ungroup() %>%
-  select(!days)
 
 #-------------------
 # Phytoplankton data
 #-------------------
-seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-24.parquet") %>% 
-  mutate(n_per_uL = case_when(pop == "picoeuk" & cruise == "KM1923_751" ~ n_per_uL / 3, # adjust for virtual core correction
-                              pop == "prochloro" & cruise == "KM1923_751" ~ n_per_uL * 2,
-                              TRUE ~ n_per_uL),
-         c_per_uL = case_when(pop == "picoeuk" & cruise == "KM1923_751" ~ c_per_uL / 3, # adjust for virtual core correction
-                              pop == "prochloro" & cruise == "KM1923_751" ~ c_per_uL * 2 ,
-                              TRUE ~ c_per_uL)) %>%
-  filter(pop != "croco") %>% # remove this population as it is only found in low abundance in too few cruises
-  group_by(pop) %>%
-  mutate(pop = case_when(
-    pop == "prochloro" ~ "Prochlorococcus",
-    pop == "synecho" ~ "Synechococcus",
-    pop == "picoeuk" & esd < 2 ~ "picoeukaryotes (< 2µm)",
-    TRUE ~ "nanoeukaryotes (2-5µm)")) 
+# seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-24.parquet") %>%
+#   mutate(n_per_uL = case_when(pop == "picoeuk" & cruise == "KM1923_751" ~ n_per_uL / 3, # adjust for virtual core correction
+#                               pop == "prochloro" & cruise == "KM1923_751" ~ n_per_uL * 2,
+#                               TRUE ~ n_per_uL),
+#          c_per_uL = case_when(pop == "picoeuk" & cruise == "KM1923_751" ~ c_per_uL / 3, # adjust for virtual core correction
+#                               pop == "prochloro" & cruise == "KM1923_751" ~ c_per_uL * 2 ,
+#                               TRUE ~ c_per_uL)) %>%
+#   filter(pop != "croco") %>% # remove this population as it is only found in low abundance in too few cruises
+#   group_by(pop) %>%
+#   mutate(pop = case_when(
+#     pop == "prochloro" ~ "Prochlorococcus",
+#     pop == "synecho" ~ "Synechococcus",
+#     pop == "picoeuk" & esd < 2 ~ "picoeukaryotes (< 2µm)",
+#     TRUE ~ "nanoeukaryotes (2-5µm)"))
+# 
+# 
+# # Note for conversion from carbon per cell to equivalent spherical diameter
+# # Menden-Deuer, S. & Lessard, E. J. Carbon to volume relationships for dinoflagellates, diatoms, and other protist plankton. Limnol. Oceanogr. 45, 569–579 (2000).
+# d <- 0.261; e <- 0.860 # < 3000 µm3
+# 
+# seaflow <- seaflow_psd %>%
+#   group_by(cruise, date, pop) %>%
+#   dplyr::reframe(
+#     lat = unique(lat, na.rm = TRUE),
+#     lon = unique(lon, na.rm = TRUE),
+#     n_per_uL = sum(n_per_uL, na.rm = TRUE), # calculate cell abundance per population
+#     c_per_uL = sum(c_per_uL, na.rm = TRUE)) %>% # calculate carbon biomass per population
+#   mutate(qc = c_per_uL / n_per_uL, # calculate carbon per cell
+#          diam = round(2*(3/(4*base::pi)*(qc/d)^(1/e))^(1/3),5)) %>% # convert carbon per cell to equivalent spherical diameter *
+#   arrange(date)
+# 
+# 
+# arrow::write_parquet(seaflow, "data/PSD_TransitionZone.parquet") 
+seaflow <- arrow::read_parquet("data/PSD_TransitionZone.parquet")  
 
-
-# Note for conversion from carbon per cell to equivalent spherical diameter
-# Menden-Deuer, S. & Lessard, E. J. Carbon to volume relationships for dinoflagellates, diatoms, and other protist plankton. Limnol. Oceanogr. 45, 569–579 (2000).
-d <- 0.261; e <- 0.860 # < 3000 µm3 
-
-seaflow <- seaflow_psd %>% 
-  group_by(cruise, date, pop) %>%
-  dplyr::reframe(
-    lat = unique(lat, na.rm = TRUE),
-    lon = unique(lon, na.rm = TRUE),
-    n_per_uL = sum(n_per_uL, na.rm = TRUE), # calculate cell abundance per population
-    c_per_uL = sum(c_per_uL, na.rm = TRUE)) %>% # calculate carbon biomass per population
-  mutate(qc = c_per_uL / n_per_uL, # calculate carbon per cell
-         diam = round(2*(3/(4*base::pi)*(qc/d)^(1/e))^(1/3),5)) %>% # convert carbon per cell to equivalent spherical diameter *
-  arrange(date) 
 
 #-------------------
 # Extract diel trend
@@ -118,6 +132,8 @@ decomp <-  function(data, day = 3){
     ungroup()
   return(ts)
 }
+
+
 
 day <- 3
 seaflow <-  seaflow %>%
@@ -422,27 +438,41 @@ data_figures <- data_figures %>%
 # plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>%  layout(geo = geo)
 
 
-
+### Statistics to test difference among regions
 meta_gyre_d %>%
-  filter(pop == "Prochlorococcus") %>%
-  #filter(gyre != "Transition") %>%
-  #filter(direction == "North") %>%
-  #group_by(season, gyre) %>%
-  summarize(max = max(growth, na.rm = TRUE),
-            mean = mean(growth, na.rm = TRUE),
-            sd = sd(growth, na.rm = TRUE))
+  group_by(date) %>%
+  #mutate(biomass = abundance) %>%
+  mutate(total = 1) %>%
+  #mutate(total = sum(biomass, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(direction == "East") %>%
+  #filter(pop == "Synechococcus") %>%
+  filter(pop == "picoeukaryotes (< 2µm)") %>%
+  #filter(pop == "nanoeukaryotes (2-5µm)") %>%
+  #filter(season == "Spring") %>%
+  group_by(gyre) %>%
+  summarize(min = min(biomass/total, na.rm = TRUE),
+            max = max(biomass/total, na.rm = TRUE),
+            mean = mean(biomass/total, na.rm = TRUE),
+            sd = sd(biomass/total, na.rm = TRUE))
 
 
 o <- meta_gyre_d %>%
   filter(pop == "Synechococcus") %>%
-  filter(gyre == "outside") %>%
-  #filter(direction == "North"| direction == "South") %>%
+  #filter(gyre == "outside") %>%
+  #filter(direction == "North") %>%
+  #filter(season == "Spring" | season == "Summer") %>%
+  group_by(date = cut(date, "1 day")) %>%
+  reframe(growth = mean(growth, na.rm= TRUE)) %>%
   select(growth)
 
 i <- meta_gyre_d %>%
   filter(pop == "Synechococcus") %>%
-  filter(gyre == "inside") %>%
- # filter(direction == "North"| direction == "South") %>%
+  filter(gyre == "Transition") %>%
+  #filter(direction == "North") %>%
+  filter(season == "Spring") %>%
+  group_by(date = cut(date, "1 day")) %>%
+  reframe(growth = mean(growth, na.rm= TRUE)) %>%
   select(growth)
 
 t.test(o, i, paired = FALSE, alternative = "less", conf.level = 0.99)
@@ -456,159 +486,142 @@ t.test(o, i, paired = FALSE, alternative = "less", conf.level = 0.99)
 ### FIGURE 1
 
 getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
+s <- 2
 
-# plot cruise track
 fig1a <- meta_gyre_d %>%
   ggplot() +
-  geom_path(aes(lon - 360, lat, color = cruise), lwd=2, show.legend = F) +
+  geom_path(aes(lon - 360, lat, color = cruise), lwd = 1, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
-  theme_bw() +
   scale_color_manual(values = getPalette(10)) +
-  theme(text = element_text(size = 20)) + 
+  my_theme + 
   xlab("Longitude (ºW)") +
   ylab("Latitude (ºN)") +
-  annotate("text", x=-140, y=50, label="KM1713") +
-  annotate("text", x=-142, y=42, label="KM1712") +
-  annotate("text", x=-166, y=45, label="KOK1606") +
-  annotate("text", x=-166, y=40, label="MGL1704") +
-  annotate("text", x=-166, y=35, label="KM1906") +
-  annotate("text", x=-160, y=-1, label="KM1923") +
-  annotate("text", x=-122, y=22, label="TN397a") +
-  annotate("text", x=-133, y=10, label="TN397b") +
-  annotate("text", x=-146, y=-2, label="TN397c") +
-  annotate("text", x=-130, y=35, label="TN398")
+  annotate("text", x=-140, y=45, label="KM1713", size=s) +
+  annotate("text", x=-142, y=42, label="KM1712", size=s) +
+  annotate("text", x=-162, y=45, label="KOK1606", size=s) +
+  annotate("text", x=-162, y=40, label="MGL1704", size=s) +
+  annotate("text", x=-162, y=35, label="KM1906", size=s) +
+  annotate("text", x=-160, y=-1, label="KM1923", size=s) +
+  annotate("text", x=-122, y=22, label="TN397a", size=s) +
+  annotate("text", x=-133, y=10, label="TN397b", size=s) +
+  annotate("text", x=-146, y=5, label="TN397c", size=s) +
+  annotate("text", x=-130, y=35, label="TN398", size=s)
+
+fig1b <- data_figures %>%
+  #filter(!is.na(salinity_mean)) %>%
+  ggplot(aes(distance, salinity_mean, color = cruise)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_linerange(aes(ymin = salinity_mean - salinity_sd, ymax = salinity_mean + salinity_sd), show.legend = F) +
+  geom_point(show.legend = F) +
+  geom_line(lwd = 1) +
+  my_theme +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
+  scale_color_manual(values = getPalette(10)) +
+  xlab("Distance (km)") +
+  ylab("Salinity (PSU)") 
+
+fig1c <- data_figures %>%
+  #filter(!is.na(temp_mean)) %>%
+  ggplot(aes(distance, temp_mean, color = cruise)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_linerange(aes(ymin = temp_mean - temp_sd, ymax = temp_mean + temp_sd), show.legend = F) +
+  geom_point() +
+  geom_line(lwd = 1) +
+  my_theme +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
+  scale_color_manual(values = getPalette(10)) +
+  xlab("Distance (km)") +
+  ylab("Temp (ºC)") 
 
 # plot gyre boundaries
-fig1b <- meta_gyre_d %>%
+fig1d <- meta_gyre_d %>%
   ggplot() +
-  geom_path(aes(lon - 360, lat, color = gyre, group = cruise), lwd = 2, show.legend = F) +
+  geom_path(aes(lon - 360, lat, color = gyre, group = cruise), lwd = 1, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
-  theme_bw() +
+  my_theme +
   scale_color_manual(values = viridis(3)) +
-  theme(text = element_text(size = 20)) + 
   xlab("Longitude (ºW)") +
   ylab("Latitude (ºN)")
 
-# plot environmental variables
-
-fig1c <- data_figures %>%
-  filter(!is.na(salinity_mean)) %>%
-  ggplot(aes(distance, salinity_mean, color = cruise)) +
-  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = salinity_mean - salinity_sd, ymax = salinity_mean + salinity_sd), lwd = 0.5, show.legend = F) +
-  geom_point(size = 2, show.legend = T) +
-  geom_line(aes(col = cruise), lwd = 2) +
-  theme_bw() +
-  scale_color_manual(values = getPalette(10)) +
-  theme(text = element_text(size = 20)) + 
-  xlab("") +
-  ylab("Salinity (psu)") 
-
-fig1d <- data_figures %>%
-  filter(!is.na(temp_mean)) %>%
-  ggplot(aes(distance, temp_mean, color = cruise)) +
-  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = temp_mean - temp_sd, ymax = temp_mean + temp_sd), lwd = 0.5, show.legend = F) +
-  geom_point(size = 2,  show.legend = T) +
-  geom_line(aes(col = cruise), lwd = 2) +
-  theme_bw() +
-  scale_color_manual(values = getPalette(10)) +
-  theme(text = element_text(size = 20)) + 
-  xlab("") +
-  ylab("Temp (ºC)") 
-
 fig1e <- data_figures %>%
-  filter(!is.na(light_mean)) %>%
-  ggplot(aes(distance, light_mean/100, color = cruise)) +
-  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = light_mean/100 - light_sd/100, ymax = light_mean/100 + light_sd/100), lwd = 0.5, show.legend = F) +
-  geom_point(size = 2,  show.legend = T) +
-  geom_line(aes(col = cruise), lwd = 2) +
-  theme_bw() +
-  scale_color_manual(values = getPalette(10)) +
-  theme(text = element_text(size = 20)) + 
-  xlab("Distance (km)") +
-  ylab(expression(paste("Light (µmolE m"^{-2},"s"^{-1},")")))
-  
-
-fig1f <- data_figures %>%
-  filter(!is.na(NO3_NO2_mean)) %>%
+  #filter(!is.na(NO3_NO2_mean)) %>%
   ggplot(aes(distance, NO3_NO2_mean, color = cruise)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = NO3_NO2_mean - NO3_NO2_sd, ymax = NO3_NO2_mean + NO3_NO2_sd), lwd = 0.5, show.legend = F) +
-  geom_point(size = 2,  show.legend = T) +
-  geom_line(aes(col = cruise), lwd = 2) +
-  theme_bw() +
+  geom_linerange(aes(ymin = NO3_NO2_mean - NO3_NO2_sd, ymax = NO3_NO2_mean + NO3_NO2_sd), show.legend = F) +
+  geom_point(show.legend = F) +
+  geom_line(lwd = 1) +
+  my_theme +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
   scale_color_manual(values = getPalette(10)) +
-  theme(text = element_text(size = 20)) + 
-  xlab("") +
-  ylab(expression(paste("DIN (µmol L"^{-1},")"))) +
-  ylim(0,10)
-
-fig1g <- data_figures %>%
-  filter(!is.na(PO4_mean)) %>%
-  ggplot(aes(distance, PO4_mean*10, color = cruise)) +
-  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = PO4_mean*10 - PO4_sd*10, ymax = PO4_mean*10 + PO4_sd*10), lwd = 0.5, show.legend = F) +
-  geom_point(size = 2,  show.legend = T) +
-  geom_line(aes(col = cruise), lwd = 2) +
-  theme_bw() +
-  scale_color_manual(values = getPalette(10)) +
-  theme(text = element_text(size = 20)) + 
-  xlab("") +
-  ylab(expression(paste("DIP (µmol L"^{-1},")"))) +
-  ylim(0,10)
-
-fig1h <- data_figures %>%
-  filter(!is.na(MLD_mean)) %>%
-  ggplot(aes(distance, MLD_mean, color = cruise)) +
-  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = MLD_mean - MLD_sd, ymax = MLD_mean + MLD_sd), lwd = 0.5, show.legend = F) +
-  geom_point(size = 2,  show.legend = T) +
-  geom_line(aes(col = cruise), lwd = 2) +
-  theme_bw() +
-  scale_color_manual(values = getPalette(10)) +
-  theme(text = element_text(size = 20)) + 
   xlab("Distance (km)") +
-  ylab("Mixed Layer Depth (m)") 
+  ylab(expression(paste("DIN (µmol L"^{-1},")"))) 
 
-png("figures/Figure_1.png", width = 2500, height = 3000, res = 200)
-ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1f, fig1d, fig1g,
-                  ncol = 2, nrow = 3, 
-                  common.legend = TRUE, legend = "bottom",
-                  labels="auto") +
-  theme(plot.margin = margin(0.1,0.5,0.1,0.1, "cm")) 
+fig1f <- data_figures %>%
+#  filter(!is.na(PO4_mean)) %>%
+  ggplot(aes(distance, 10*PO4_mean, color = cruise)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_linerange(aes(ymin = 10*(PO4_mean - PO4_sd), ymax = 10 * (PO4_mean + PO4_sd)), show.legend = F) +
+  geom_point(show.legend = F) +
+  geom_line(lwd = 1) +
+  my_theme +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
+  scale_color_manual(values = getPalette(10)) +
+  xlab("Distance (km)") +
+  ylab(expression(paste("DIP (10 x µmol L"^{-1},")"))) 
+
+png("figures/Figure_1.png", width = 2000, height = 1200, res = 200)
+ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1d,fig1e, fig1f,
+                  ncol = 3, nrow = 2, labels="auto",
+                  common.legend = TRUE, legend = "top")
 dev.off()
 
 
+
+
+
+
+
+
+
 ### FIGURE 2
-# plot biomass over distance per cruise
-
 # scale nutrient to biomass data
-coeff <- 4
+#coeff <- 4
 
-fig2 <- data_figures %>%
+fig2a <- data_figures %>%
   ggplot(aes(distance, biomass_mean, col = pop)) + 
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_ribbon(aes(ymin = biomass_mean - biomass_sd, ymax = biomass_mean + biomass_sd, fill = pop), alpha = 0.5, show.legend = FALSE, position = "stack") +
+  geom_ribbon(aes(ymin = biomass_mean - biomass_sd, ymax = biomass_mean + biomass_sd, fill = pop), alpha = 0.5, show.legend = TRUE, position = "stack") +
   #geom_linerange(aes(ymin = biomass_mean - biomass_sd, ymax = biomass_mean + biomass_sd), lwd = 0.5,show.legend = FALSE) + 
   #geom_line(aes(col = pop), lwd = 1, show.legend = TRUE, position = "stack") + 
-  geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
-  scale_color_manual(values = pop_cols, name = "Population") +
-  scale_fill_manual(values = pop_cols, name = "Population") +
-  scale_y_continuous(name = expression(paste("Biomass (µgC L"^{-1},")")),
-                     sec.axis = sec_axis(transform =~./coeff, 
-                                         name = expression(paste("DIN (µmol L"^{-1},")")))) +
+  #geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
+  scale_color_manual(values = pop_cols, name = "") +
+  scale_fill_manual(values = pop_cols, name = "") +
+  scale_y_continuous(name = expression(paste("Biomass (µgC L"^{-1},")"))) +
+                     # sec.axis = sec_axis(transform =~./coeff, 
+                     #                     name = expression(paste("DIN (µmol L"^{-1},")")))) +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
   facet_wrap(. ~ label, ncol = 5) +
-  theme_bw(base_size = 13) +
-  theme(legend.position = "top") +
+  my_theme +
   xlab("Distance (km)") 
 
 
-png("figures/Figure_2.png", width = 2500, height = 1500, res = 200)
-print(fig2)
+fig2b <- data_figures %>%
+  ggplot(aes(distance, abundance_mean,  col = pop, fill = pop)) + 
+  annotate("rect", xmin = -binning, xmax = binning, ymin = 0, ymax = Inf,  fill = "lightgrey") +
+  geom_linerange(aes(ymin = abundance_mean - abundance_sd, ymax = abundance_mean + abundance_sd), lwd = 0.5, show.legend = F) +
+  geom_line(lwd = 1) + 
+  scale_color_manual(values = pop_cols, name = "Population") +
+  scale_y_continuous(trans = "log10", name = expression(paste("Abundance (10"^{6}," cells L"^{-1},")"))) +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
+  facet_wrap( . ~ label, ncol = 5) +
+  my_theme +
+  xlab("Distance (km)")
+
+
+png("figures/Figure_2.png", width = 2000, height = 1500, res = 200)
+ggpubr::ggarrange(fig2a, fig2b, ncol = 1, nrow = 2, common.legend = TRUE, legend = "top", labels="auto")
 dev.off()
 
 
@@ -620,17 +633,18 @@ dev.off()
 fig3 <- data_figures %>%
   #filter(pop == "Prochlorococcus" | pop == "Synechococcus") %>%
   drop_na(growth_mean) %>%
-  ggplot(aes(distance, growth_mean, group = pop)) +
+  ggplot(aes(distance, growth_mean, group = pop, col  = pop)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = growth_mean - growth_sd, ymax = growth_mean + growth_sd, col = pop), lwd= 0.5, show.legend = FALSE) +
-  geom_line(aes(col= pop), lwd= 1, show.legend = TRUE) +
+  geom_linerange(aes(ymin = growth_mean - growth_sd, ymax = growth_mean + growth_sd), lwd= 0.5, show.legend = FALSE) +
+  geom_line(lwd = 1) +
   scale_color_manual(values = pop_cols, name = "Population") +
   facet_wrap(. ~ label, ncol = 5) +
-  theme_bw(base_size = 13) +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
+  my_theme + 
   theme(legend.position = "top") +
   labs(y = expression(paste("Net Cellular Growth (d"^{-1},")")), x = "Distance (km)")
 
-png("figures/Figure_3.png", width = 2500, height = 1500, res = 200)
+png("figures/Figure_3.png", width = 2000, height = 750, res = 200)
 print(fig3)
 dev.off()
 
@@ -645,6 +659,9 @@ cor_all <-  meta_gyre_d  %>%
   mutate(pop = factor(pop, levels = c(names(pop_cols)[1], names(pop_cols)[2], names(pop_cols)[3], names(pop_cols)[4]))) %>%
   arrange(pop) %>%
   rename(DIN = NO3_NO2, DIP = PO4, temperature = temp) %>%
+  group_by(pop, date = cut(date, "1 day")) %>%
+  summarize_all(function(x) mean(x, na.rm = TRUE)) %>%
+  ungroup() %>%
   select(pop, growth, biomass, temperature,DIN, DIP) %>%
   pivot_wider(names_from = pop, values_from = c(growth, biomass), values_fn = mean) %>%
       {
@@ -664,15 +681,15 @@ cor_all <-  meta_gyre_d  %>%
 
 
 
-colors <- colorRampPalette(c("blue2", "grey90", "red2"))(200)
+colors <- colorRampPalette(c("blue3", "white", "red3"))(10)
 
 png("figures/Figure_4.png", width = 1500, height = 1500, res = 200)
 
 par(mfrow=c(1,1))
 corrplot(cor_all$cor_matrix, p.mat = cor_all$p_adj_matrix, 
-         sig.level = 0.001, insig = "blank",
-         diag = F,
-         type = "lower", method = "color", addgrid.col = F, tl.col = "black", col = colors)
+         sig.level = 0.01, insig = "blank",
+         diag = F,  
+         type = "lower", method = "color", addgrid.col = T, tl.col = "black", col = colors)
 
 
 dev.off()
@@ -698,38 +715,22 @@ dev.off()
 #------------------------
 # d. Supplemental Figures 
 #------------------------
-
 figS1 <- data_figures %>%
-  ggplot(aes(distance, abundance_mean,  col = pop, fill = pop)) + 
-  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = abundance_mean - abundance_sd, ymax = abundance_mean + abundance_sd), lwd = 0.5, show.legend = F) +
-  geom_line(lwd = 1) + 
-  scale_color_manual(values = pop_cols, name = "Population") +
-  scale_y_continuous(name = expression(paste("Abundance (10"^{6}," cells L"^{-1},")"))) +
-  facet_wrap( . ~ label, ncol = 5) +
-  theme_bw(base_size = 13) +
-  theme(legend.position = "top") +
-  xlab("Distance (km)")
-
-png("figures/Figure_S1.png", width = 2500, height = 1500, res = 200)
-print(figS1)
-dev.off()
-
-figS2 <- data_figures %>%
   ggplot(aes(distance, diameter_mean,  col = pop, fill = pop)) + 
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = diameter_mean - diameter_sd, ymax = diameter_mean + diameter_sd), lwd = 0.5, show.legend = F) +
   geom_line(lwd = 1) + 
   scale_color_manual(values = pop_cols, name = "Population") +
   scale_y_continuous(name = "Equivalent spherical diameter (μm)") +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
   facet_wrap( . ~ label, ncol = 5) +
-  theme_bw(base_size = 13) +
+  my_theme +
   theme(legend.position = "top") +
   xlab("Distance (km)")
 
 
-png("figures/Figure_S2.png", width = 2500, height = 1500, res = 200)
-print(figS2)
+png("figures/Figure_S1.png", width = 2000, height = 750, res = 200)
+print(figS1)
 dev.off()
 
 
@@ -767,7 +768,7 @@ cor_all_south <- process_corr_data(data_figures, "South")
 
 colors <- colorRampPalette(c("blue2", "grey90","red2"))(200)
 
-png("figures/Figure_S3.png", width = 4500, height = 1500, res = 200)
+png("figures/Figure_S2.png", width = 4500, height = 1500, res = 200)
 
 par(mfrow=c(1,3))
 # North plot
