@@ -485,7 +485,11 @@ t.test(o, i, paired = FALSE, alternative = "less", conf.level = 0.99)
 
 ### FIGURE 1
 
-getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
+#getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
+cruise_cols <- c("KOK1606" = "#154406", "MGL1704" = "#08C495", 
+                 "KM1906" = "#2E8B57",  "KM1712" = "#C21807",
+                 "KM1713" = "#FF0090", "KM1923" = "#D3B683", "TN397b" = "#E9A1B0",
+                 "TN397c" = "#FFC067", "TN397a" = "#95632E", "TN398" = "#7F86D8")
 s <- 2
 
 fig1a <- meta_gyre_d %>%
@@ -517,7 +521,7 @@ fig1b <- data_figures %>%
   geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  scale_color_manual(values = getPalette(10)) +
+  scale_color_manual(values = cruise_cols) +
   xlab("Distance (km)") +
   ylab("Salinity (PSU)") +
   annotate("text", x=-500, y=36, label="inside gyre", size=s) +
@@ -532,7 +536,7 @@ fig1c <- data_figures %>%
   geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  scale_color_manual(values = getPalette(10)) +
+  scale_color_manual(values = cruise_cols) +
   xlab("Distance (km)") +
   ylab("Temp (ºC)") 
 
@@ -556,7 +560,7 @@ fig1e <- data_figures %>%
   geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  scale_color_manual(values = getPalette(10)) +
+  scale_color_manual(values = cruise_cols) +
   xlab("Distance (km)") +
   ylab(expression(paste("DIN (µmol L"^{-1},")"))) 
 
@@ -569,7 +573,7 @@ fig1f <- data_figures %>%
   geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  scale_color_manual(values = getPalette(10)) +
+  scale_color_manual(values = cruise_cols) +
   xlab("Distance (km)") +
   ylab(expression(paste("DIP (10 x µmol L"^{-1},")"))) 
 
