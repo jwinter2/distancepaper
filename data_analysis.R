@@ -387,7 +387,7 @@ meta_gyre_d  <- meta_gyre_d %>%
 #------------------------------
 
 # set colors
-pop_cols <- c("Prochlorococcus" = rocket(7)[6], "Synechococcus" = rocket(7)[4], "picoeukaryotes (< 2µm)" = rocket(7)[3],  "nanoeukaryotes (2-5µm)" = rocket(7)[2])
+pop_cols <- c("Prochlorococcus" = rocket(7)[6], "Synechococcus" = rocket(7)[4], "picoeukaryotes (< 2µm)" = rocket(7)[3],  "nanoeukaryotes (2-5µm)" = rocket(7)[1])
 
 ### Calculate mean and sd over binned distance from the edges of the NPSG
 
@@ -519,7 +519,9 @@ fig1b <- data_figures %>%
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
   scale_color_manual(values = getPalette(10)) +
   xlab("Distance (km)") +
-  ylab("Salinity (PSU)") 
+  ylab("Salinity (PSU)") +
+  annotate("text", x=-500, y=36, label="inside gyre", size=s) +
+  annotate("text", x=500, y=36, label="outside gyre", size=s)
 
 fig1c <- data_figures %>%
   #filter(!is.na(temp_mean)) %>%
