@@ -1,8 +1,6 @@
 library(tidyverse)
-library(arrow)
 library(geosphere)
 library(sf)
-library(plotly)
 library(viridis)
 library(dplyr)
 library(corrplot)
@@ -11,115 +9,19 @@ my_theme <- theme_bw() +
                panel.grid.major = element_blank(),
                panel.grid.minor = element_blank())
   
-#-----------------
-# For plotting map
-#-----------------
-
-geo <- list(
-  showland = TRUE,
-  showlakes = TRUE,
-  showcountries = TRUE,
-  showocean = TRUE,
-  countrywidth = 0.5,
-  landcolor = toRGB("grey90"),
-  lakecolor = toRGB("white"),
-  oceancolor = toRGB("white"),
-  projection = list(
-    type = 'orthographic',
-    rotation = list(
-      lon = -160,
-      lat = 30,
-      roll = 0
-    )
-  ),
-  lonaxis = list(
-    showgrid = TRUE,
-    gridcolor = toRGB("gray40"),
-    gridwidth = 0.5
-  ),
-  lataxis = list(
-    showgrid = TRUE,
-    gridcolor = toRGB("gray40"),
-    gridwidth = 0.5
-  )
-)
-
-setwd("/Users/ribalet/Documents/Codes/distancepaper")
 
 #-------------------
 # Environmental data
 #-------------------
-# env <- read_csv("data/EnvironmentalData_2022-05-22.csv") %>% arrange(date)
-# env$date <- as.POSIXct(env$date, format = "%m/%d/%y %H:%M", tz = "GMT")
-# 
-# ### Clean-up data
-# # salinity and Temperature (due to freshwater contamination in ships' seawater supply)
-# env <- env %>%
-#   group_by(cruise) %>%
-#   mutate(
-#     salinity = case_when(salinity < 32 ~ NaN,
-#                          date < as.Date("2017-06-05") & cruise == "Gradients 2" ~ NaN, # contaminated salinity during first half the cruise
-#                          c(abs(diff(salinity)),0) > 0.5 ~ NaN, # sporadic drops in salinity during TN271 cruise
-#                          TRUE ~ salinity),
-#     temp = case_when(temp > 32 ~ NaN,
-#                      TRUE ~ temp))
-# 
-# # calculate daily-averaged par
-# env <- env %>%
-#   group_by(days = lubridate::floor_date(date, unit = "days")) %>%
-#   mutate(light = mean(par)) %>%
-#   ungroup() %>%
-#   select(!days)
-# 
-# 
-# write_csv(env, "data/EnvironmentalData.csv")
-env <- read_csv("data/EnvironmentalData.csv")
-
+env <- read_csv("EnvironmentalData.csv")
 
 #-------------------
 # Phytoplankton data
 #-------------------
-# seaflow_psd <- arrow::read_parquet("data/PSD_TransitionZone_2022-05-24.parquet") %>%
-#   mutate(n_per_uL = case_when(pop == "picoeuk" & cruise == "KM1923_751" ~ n_per_uL / 3, # adjust for virtual core correction
-#                               pop == "prochloro" & cruise == "KM1923_751" ~ n_per_uL * 2,
-#                               TRUE ~ n_per_uL),
-#          c_per_uL = case_when(pop == "picoeuk" & cruise == "KM1923_751" ~ c_per_uL / 3, # adjust for virtual core correction
-#                               pop == "prochloro" & cruise == "KM1923_751" ~ c_per_uL * 2 ,
-#                               TRUE ~ c_per_uL)) %>%
-#   filter(pop != "croco") %>% # remove this population as it is only found in low abundance in too few cruises
-#   group_by(pop) %>%
-#   mutate(pop = case_when(
-#     pop == "prochloro" ~ "Prochlorococcus",
-#     pop == "synecho" ~ "Synechococcus",
-#     pop == "picoeuk" & esd < 2 ~ "picoeukaryotes (< 2µm)",
-#     TRUE ~ "nanoeukaryotes (2-5µm)"))
-# 
-# 
-# # Note for conversion from carbon per cell to equivalent spherical diameter
-# # Menden-Deuer, S. & Lessard, E. J. Carbon to volume relationships for dinoflagellates, diatoms, and other protist plankton. Limnol. Oceanogr. 45, 569–579 (2000).
-# d <- 0.261; e <- 0.860 # < 3000 µm3
-# 
-# seaflow <- seaflow_psd %>%
-#   group_by(cruise, date, pop) %>%
-#   dplyr::reframe(
-#     lat = unique(lat, na.rm = TRUE),
-#     lon = unique(lon, na.rm = TRUE),
-#     n_per_uL = sum(n_per_uL, na.rm = TRUE), # calculate cell abundance per population
-#     c_per_uL = sum(c_per_uL, na.rm = TRUE)) %>% # calculate carbon biomass per population
-#   mutate(qc = c_per_uL / n_per_uL, # calculate carbon per cell
-#          diam = round(2*(3/(4*base::pi)*(qc/d)^(1/e))^(1/3),5)) %>% # convert carbon per cell to equivalent spherical diameter *
-#   arrange(date)
-# 
-# 
-# arrow::write_parquet(seaflow, "data/PSD_TransitionZone.parquet") 
-seaflow <- arrow::read_parquet("data/PSD_TransitionZone.parquet")  
-write_csv(seaflow, "data/PSD_TransitionZone.csv")
+seaflow <- read_csv("PSD_TransitionZone.csv")  
 
-#-------------------
-# Extract diel trend
-#-------------------
+### Extract diel trend
 decomp <-  function(data, day = 3){
-  #print(unique(data[,"cruise"]))
   time <- unlist(list(zoo::rollapply(data[,"date"], width=24*day, function(x) unique(x), by.column = F)))
   diel <- unlist(list(zoo::rollapply(data[,"qc"], width=24*day, function(x) decompose(ts(x, frequency=24), type="multiplicative")$seasonal, by.column= F))) -1
   quotas <- unlist(list(zoo::rollapply(data[,"qc"], width=24*day, function(x) decompose(ts(x, frequency=24), type="multiplicative")$trend, by.column= F)))
@@ -133,8 +35,7 @@ decomp <-  function(data, day = 3){
   return(ts)
 }
 
-
-
+### apply function by populaiton and cruise
 day <- 3
 seaflow <-  seaflow %>%
   group_by(pop, cruise) %>%
@@ -186,11 +87,6 @@ pre_meta  <- pre_meta  %>% mutate(direction = case_when(cruise == "KOK1606" | cr
                                                      cruise == "TN398" ~ "Winter"),
                                   season = factor(season, levels = c("Spring", "Summer", "Fall", "Winter")))
 
-### plot cruise track
-# plot_geo(pre_meta, lat = ~ lat, lon = ~ lon, color = ~ cruise, mode = "scatter") %>%  layout(geo = geo)
-
-
-
 #-------------------------------
 # Calculate cellular growth rate
 #-------------------------------
@@ -215,11 +111,6 @@ meta <- meta %>%
     TRUE ~ growth)) %>%
   select(!c(day, daytime, daynight, n_obs))
 
-### plot daily growth estimates for each cruise over time
-# meta %>% ggplot(aes(date, daily_growth, col = pop)) +
-#   geom_point(pch= 21) +
-#   facet_wrap(. ~ cruise, scale = "free_x") +
-#   theme_bw()
 
 
 
@@ -265,10 +156,6 @@ meta_distance_binned <- meta_distance %>%
   mutate(distance = as.numeric(as.character(distance)))
 
 
-### plot salinity
-# plot_geo(meta_distance, lat = ~ lat, lon = ~ lon, color = ~ salinity, mode = "scatter", colors = "Spectral") %>%  layout(geo = geo)
-
-
 ### Find abrupt changes in salinity (modified from Follett et al., 2021 Limnology & Oceanography 66 - 2442:2454, doi: 10.1002/lno.11763)
 # calculate change of salinity over distance, using smooth salinity data
 smooth_up <- 0.8 # upper smoothing parameter
@@ -300,19 +187,6 @@ tz <- meta_distance_binned %>%
       sal_front_up = max(sal_front_up, na.rm = TRUE),
       sal_front_down = max(sal_front_down, na.rm = TRUE)) 
 
- 
-### plot locations of all abrupt changes of salinity
-# meta_distance_binned %>%  ggplot() +
-#   geom_point(aes(distance, salinity)) +
-#   geom_point(aes(distance, smooth_salinity), col = "red") +
-#   geom_point(aes(distance, smooth_salinity_down), col = "green") +
-#   geom_point(aes(distance, smooth_salinity_up), col = "blue") +
-#   geom_hline(data = tz, aes( yintercept = sal_front), col = "red") +
-#   geom_hline(data = tz, aes( yintercept = sal_front_down), col = "green") +
-#   geom_hline(data = tz, aes( yintercept = sal_front_up), col = "blue") +
-#   facet_wrap(. ~ cruise, scale = "free_x")
-
-
 ### Identify locations inside or outside the gyre (0 = gyre; 1 = outside gyre)
 # Note: using the unbinned data this time
 meta_gyre <- left_join(meta, tz) %>%
@@ -328,10 +202,6 @@ meta_gyre <- meta_gyre %>%
            lon < 220 & lat < 33 & lat > 21 & raw_gyre == 1 ~ 0,
            TRUE ~ raw_gyre)) %>%
   select(!c(raw_gyre, sal_front, sal_front_down, sal_front_up)) # remove unnecessary columns
-
-
-# plot gyre
-# plot_geo(meta_gyre, lat = ~ lat, lon = ~ lon, color = ~ as.character(gyre), mode = "scatter") %>%  layout(geo = geo)
 
 
 ### calculate distance (km) from boundaries of the NPSG for each cruise
@@ -376,18 +246,12 @@ meta_gyre_d  <- meta_gyre_d %>%
 
 
 
-# plot gyre
-#plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ distance, mode = "scatter", colors =  colorRampPalette(c("blue2", "grey90", "red2"))(200)) %>%  layout(geo = geo)
-
-
-
-
 #------------------------------
 # b. BINNING data over DISTANCE
 #------------------------------
 
 # set colors
-pop_cols <- c("Prochlorococcus" = rocket(7)[6], "Synechococcus" = rocket(7)[4], "picoeukaryotes (< 2µm)" = rocket(7)[3],  "nanoeukaryotes (2-5µm)" = rocket(7)[1])
+pop_cols <- c("Prochlorococcus" = rocket(7)[6], "Synechococcus" = rocket(7)[4], "picoeukaryotes (< 2µm)" = rocket(7)[3],  "nanoeukaryotes (2-5µm)" = rocket(7)[2])
 
 ### Calculate mean and sd over binned distance from the edges of the NPSG
 
@@ -432,51 +296,6 @@ data_figures <- data_figures %>%
   mutate(cruise = factor(cruise, levels = c("KOK1606","MGL1704","KM1906","KM1712","KM1713","KM1923","TN397b","TN397c", "TN397a","TN398")),
          label = factor(label, levels = c("KOK1606\n(North/Spring)","MGL1704\n(North/Spring)","KM1906\n(North/Spring)","KM1712\n(North/Summer)","KM1713\n(North/Summer)","KM1923\n(South/Fall)","TN397b\n(South/Fall)","TN397c\n(South/Fall)", "TN397a\n(East/Fall)","TN398\n(East/Winter)")),
          pop = factor(pop, levels = c(names(pop_cols)[4], names(pop_cols)[3], names(pop_cols)[2], names(pop_cols)[1])))
-  
-
-# plot cruise tracks
-# plot_geo(meta_gyre_d, lat = ~ lat, lon = ~ lon, color = ~ gyre, mode = "scatter", colors = viridis(9, alpha = 1, begin = 0, end = 1, direction = 1)) %>%  layout(geo = geo)
-
-
-### Statistics to test difference among regions
-meta_gyre_d %>%
-  group_by(date) %>%
-  #mutate(biomass = abundance) %>%
-  mutate(total = 1) %>%
-  #mutate(total = sum(biomass, na.rm = TRUE)) %>%
-  ungroup() %>%
-  filter(direction == "East") %>%
-  #filter(pop == "Synechococcus") %>%
-  filter(pop == "picoeukaryotes (< 2µm)") %>%
-  #filter(pop == "nanoeukaryotes (2-5µm)") %>%
-  #filter(season == "Spring") %>%
-  group_by(gyre) %>%
-  summarize(min = min(biomass/total, na.rm = TRUE),
-            max = max(biomass/total, na.rm = TRUE),
-            mean = mean(biomass/total, na.rm = TRUE),
-            sd = sd(biomass/total, na.rm = TRUE))
-
-
-o <- meta_gyre_d %>%
-  filter(pop == "Synechococcus") %>%
-  #filter(gyre == "outside") %>%
-  #filter(direction == "North") %>%
-  #filter(season == "Spring" | season == "Summer") %>%
-  group_by(date = cut(date, "1 day")) %>%
-  reframe(growth = mean(growth, na.rm= TRUE)) %>%
-  select(growth)
-
-i <- meta_gyre_d %>%
-  filter(pop == "Synechococcus") %>%
-  filter(gyre == "Transition") %>%
-  #filter(direction == "North") %>%
-  filter(season == "Spring") %>%
-  group_by(date = cut(date, "1 day")) %>%
-  reframe(growth = mean(growth, na.rm= TRUE)) %>%
-  select(growth)
-
-t.test(o, i, paired = FALSE, alternative = "less", conf.level = 0.99)
-
 
 #----------------
 # c. Main Figures
@@ -485,11 +304,7 @@ t.test(o, i, paired = FALSE, alternative = "less", conf.level = 0.99)
 
 ### FIGURE 1
 
-#getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
-cruise_cols <- c("KOK1606" = "#154406", "MGL1704" = "#08C495", 
-                 "KM1906" = "#2E8B57",  "KM1712" = "#C21807",
-                 "KM1713" = "#FF0090", "KM1923" = "#D3B683", "TN397b" = "#E9A1B0",
-                 "TN397c" = "#FFC067", "TN397a" = "#95632E", "TN398" = "#7F86D8")
+getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
 s <- 2
 
 fig1a <- meta_gyre_d %>%
@@ -513,7 +328,6 @@ fig1a <- meta_gyre_d %>%
   annotate("text", x=-130, y=35, label="TN398", size=s)
 
 fig1b <- data_figures %>%
-  #filter(!is.na(salinity_mean)) %>%
   ggplot(aes(distance, salinity_mean, color = cruise)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = salinity_mean - salinity_sd, ymax = salinity_mean + salinity_sd), show.legend = F) +
@@ -521,14 +335,11 @@ fig1b <- data_figures %>%
   geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  scale_color_manual(values = cruise_cols) +
+  scale_color_manual(values = getPalette(10)) +
   xlab("Distance (km)") +
-  ylab("Salinity (PSU)") +
-  annotate("text", x=-500, y=36, label="inside gyre", size=s) +
-  annotate("text", x=500, y=36, label="outside gyre", size=s)
+  ylab("Salinity (PSU)") 
 
 fig1c <- data_figures %>%
-  #filter(!is.na(temp_mean)) %>%
   ggplot(aes(distance, temp_mean, color = cruise)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = temp_mean - temp_sd, ymax = temp_mean + temp_sd), show.legend = F) +
@@ -536,7 +347,7 @@ fig1c <- data_figures %>%
   geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  scale_color_manual(values = cruise_cols) +
+  scale_color_manual(values = getPalette(10)) +
   xlab("Distance (km)") +
   ylab("Temp (ºC)") 
 
@@ -552,7 +363,6 @@ fig1d <- meta_gyre_d %>%
   ylab("Latitude (ºN)")
 
 fig1e <- data_figures %>%
-  #filter(!is.na(NO3_NO2_mean)) %>%
   ggplot(aes(distance, NO3_NO2_mean, color = cruise)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = NO3_NO2_mean - NO3_NO2_sd, ymax = NO3_NO2_mean + NO3_NO2_sd), show.legend = F) +
@@ -560,12 +370,11 @@ fig1e <- data_figures %>%
   geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  scale_color_manual(values = cruise_cols) +
+  scale_color_manual(values = getPalette(10)) +
   xlab("Distance (km)") +
   ylab(expression(paste("DIN (µmol L"^{-1},")"))) 
 
 fig1f <- data_figures %>%
-#  filter(!is.na(PO4_mean)) %>%
   ggplot(aes(distance, 10*PO4_mean, color = cruise)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = 10*(PO4_mean - PO4_sd), ymax = 10 * (PO4_mean + PO4_sd)), show.legend = F) +
@@ -573,11 +382,11 @@ fig1f <- data_figures %>%
   geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  scale_color_manual(values = cruise_cols) +
+  scale_color_manual(values = getPalette(10)) +
   xlab("Distance (km)") +
   ylab(expression(paste("DIP (10 x µmol L"^{-1},")"))) 
 
-png("figures/Figure_1.png", width = 2000, height = 1200, res = 200)
+png("Figure_1.png", width = 2000, height = 1200, res = 200)
 ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1d,fig1e, fig1f,
                   ncol = 3, nrow = 2, labels="auto",
                   common.legend = TRUE, legend = "top")
@@ -592,21 +401,14 @@ dev.off()
 
 
 ### FIGURE 2
-# scale nutrient to biomass data
-#coeff <- 4
 
 fig2a <- data_figures %>%
   ggplot(aes(distance, biomass_mean, col = pop)) + 
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_ribbon(aes(ymin = biomass_mean - biomass_sd, ymax = biomass_mean + biomass_sd, fill = pop), alpha = 0.5, show.legend = TRUE, position = "stack") +
-  #geom_linerange(aes(ymin = biomass_mean - biomass_sd, ymax = biomass_mean + biomass_sd), lwd = 0.5,show.legend = FALSE) + 
-  #geom_line(aes(col = pop), lwd = 1, show.legend = TRUE, position = "stack") + 
-  #geom_point(aes(distance, NO3_NO2_mean * coeff), col = 1, pch = 16, size = 3, show.legend = FALSE) + 
+  geom_ribbon(aes(ymin = biomass_mean, ymax = biomass_mean, fill = pop), alpha = 0.5, show.legend = TRUE, position = "stack") +
   scale_color_manual(values = pop_cols, name = "") +
   scale_fill_manual(values = pop_cols, name = "") +
   scale_y_continuous(name = expression(paste("Biomass (µgC L"^{-1},")"))) +
-                     # sec.axis = sec_axis(transform =~./coeff, 
-                     #                     name = expression(paste("DIN (µmol L"^{-1},")")))) +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
   facet_wrap(. ~ label, ncol = 5) +
   my_theme +
@@ -618,7 +420,7 @@ fig2b <- data_figures %>%
   annotate("rect", xmin = -binning, xmax = binning, ymin = 0, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = abundance_mean - abundance_sd, ymax = abundance_mean + abundance_sd), lwd = 0.5, show.legend = F) +
   geom_line(lwd = 1) + 
-  scale_color_manual(values = pop_cols, name = "Population") +
+  scale_color_manual(values = pop_cols, name = "") +
   scale_y_continuous(trans = "log10", name = expression(paste("Abundance (10"^{6}," cells L"^{-1},")"))) +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
   facet_wrap( . ~ label, ncol = 5) +
@@ -626,7 +428,7 @@ fig2b <- data_figures %>%
   xlab("Distance (km)")
 
 
-png("figures/Figure_2.png", width = 2000, height = 1500, res = 200)
+png("Figure_2.png", width = 2000, height = 1500, res = 200)
 ggpubr::ggarrange(fig2a, fig2b, ncol = 1, nrow = 2, common.legend = TRUE, legend = "top", labels="auto")
 dev.off()
 
@@ -637,7 +439,6 @@ dev.off()
 # Cellular Growth
 
 fig3 <- data_figures %>%
-  #filter(pop == "Prochlorococcus" | pop == "Synechococcus") %>%
   drop_na(growth_mean) %>%
   ggplot(aes(distance, growth_mean, group = pop, col  = pop)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
@@ -650,7 +451,7 @@ fig3 <- data_figures %>%
   theme(legend.position = "top") +
   labs(y = expression(paste("Net Cellular Growth (d"^{-1},")")), x = "Distance (km)")
 
-png("figures/Figure_3.png", width = 2000, height = 750, res = 200)
+png("Figure_3.png", width = 2000, height = 750, res = 200)
 print(fig3)
 dev.off()
 
@@ -689,7 +490,7 @@ cor_all <-  meta_gyre_d  %>%
 
 colors <- colorRampPalette(c("blue3", "white", "red3"))(10)
 
-png("figures/Figure_4.png", width = 1500, height = 1500, res = 200)
+png("Figure_4.png", width = 1500, height = 1500, res = 200)
 
 par(mfrow=c(1,1))
 corrplot(cor_all$cor_matrix, p.mat = cor_all$p_adj_matrix, 
@@ -702,25 +503,9 @@ dev.off()
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#------------------------
-# d. Supplemental Figures 
-#------------------------
+#---------------------
+# Supplemental Figures 
+#---------------------
 figS1 <- data_figures %>%
   ggplot(aes(distance, diameter_mean,  col = pop, fill = pop)) + 
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
@@ -735,72 +520,6 @@ figS1 <- data_figures %>%
   xlab("Distance (km)")
 
 
-png("figures/Figure_S1.png", width = 2000, height = 750, res = 200)
+png("Figure_S1.png", width = 2000, height = 750, res = 200)
 print(figS1)
 dev.off()
-
-
-
-
-
-
-# Function to process data for each direction
-process_corr_data <- function(data, direction) {
-  
-  meta_gyre_d  %>%
-    filter(direction == {{ direction }}) %>%
-    select(pop, biomass, growth, PO4, NO3_NO2, salinity, temp, light) %>%
-    pivot_wider(names_from = pop, values_from = c(biomass, growth), values_fn = mean) %>%
-    {
-      corr_data <- .
-      cor_all <- cor(corr_data, use = "complete.obs")
-      cor_all_p <- cor.mtest(corr_data, use = "complete.obs", conf.level = .99)
-      
-      # Adjust for multiple comparisons
-      pAdj <- p.adjust(c(cor_all_p[[1]]), method = "BH")
-      resAdj <- matrix(pAdj, ncol = dim(cor_all_p[[1]])[1])
-      dimnames(resAdj) <- dimnames(cor_all_p$p)
-      
-      list(cor_matrix = cor_all, p_adj_matrix = resAdj)
-    }
-}
-
-# Process data for each direction
-cor_all_north <- process_corr_data(data_figures, "North")
-cor_all_east <- process_corr_data(data_figures, "East")
-cor_all_south <- process_corr_data(data_figures, "South")
-
-
-
-colors <- colorRampPalette(c("blue2", "grey90","red2"))(200)
-
-png("figures/Figure_S2.png", width = 4500, height = 1500, res = 200)
-
-par(mfrow=c(1,3))
-# North plot
-corrplot(cor_all_north$cor_matrix, p.mat = cor_all_north$p_adj_matrix, 
-         sig.level = 0.01, insig = "blank",
-         diag = F,
-         type = "lower", method = "color", addgrid.col = F, tl.col = "black", col = colors)
-mtext("North", at=7, cex=1)
-mtext("a", at=-1, cex=1, font=2)
-
-# South plot
-corrplot(cor_all_south$cor_matrix, p.mat = cor_all_south$p_adj_matrix, 
-         sig.level = 0.01, insig = "blank",
-         diag = F,
-         type = "lower", method = "color", addgrid.col = F, tl.col = "black", col = colors)
-mtext("South", at=7, cex=1)
-mtext("b", at=-1, cex=1, font=2)
-
-# East plot
-corrplot(cor_all_east$cor_matrix, p.mat = cor_all_east$p_adj_matrix, 
-         sig.level = 0.01, insig = "blank",
-         diag = F,
-         type = "lower", method = "color", addgrid.col = F, tl.col = "black", col = colors)
-mtext("East", at=7, cex=1)
-mtext("c", at=-1, cex=1, font=2)
-
-
-dev.off()
-
