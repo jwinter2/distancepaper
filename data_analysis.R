@@ -482,39 +482,72 @@ t.test(o, i, paired = FALSE, alternative = "less", conf.level = 0.99)
 # c. Main Figures
 #----------------
 
+# change cruise names
+
+meta_gyre_d$cruise_new <- meta_gyre_d$cruise
+meta_gyre_d$cruise_new <- gsub("KOK1606", "NSP1", meta_gyre_d$cruise_new)
+meta_gyre_d$cruise_new <- gsub("MGL1704", "NSP2", meta_gyre_d$cruise_new)
+meta_gyre_d$cruise_new <- gsub("KM1906", "NSP3", meta_gyre_d$cruise_new)
+meta_gyre_d$cruise_new <- gsub("KM1712", "NSU1", meta_gyre_d$cruise_new)
+meta_gyre_d$cruise_new <- gsub("KM1713", "NSU2", meta_gyre_d$cruise_new)
+meta_gyre_d$cruise_new <- gsub("KM1923", "SF1", meta_gyre_d$cruise_new)
+meta_gyre_d$cruise_new <- gsub("TN397b", "SF2", meta_gyre_d$cruise_new)
+meta_gyre_d$cruise_new <- gsub("TN397c", "SF3", meta_gyre_d$cruise_new)
+meta_gyre_d$cruise_new <- gsub("TN397a", "EF1", meta_gyre_d$cruise_new)
+meta_gyre_d$cruise_new <- gsub("TN398", "EW1", meta_gyre_d$cruise_new)
+meta_gyre_d <- meta_gyre_d %>%
+  mutate(cruise_new = factor(cruise_new, levels = c("NSP1","NSP2","NSP3","NSU1","NSU2","SF1","SF2","SF3", "EF1","EW1")))
+
+data_figures$cruise_new <- data_figures$cruise
+data_figures$cruise_new <- gsub("KOK1606", "NSP1", data_figures$cruise_new)
+data_figures$cruise_new <- gsub("MGL1704", "NSP2", data_figures$cruise_new)
+data_figures$cruise_new <- gsub("KM1906", "NSP3", data_figures$cruise_new)
+data_figures$cruise_new <- gsub("KM1712", "NSU1", data_figures$cruise_new)
+data_figures$cruise_new <- gsub("KM1713", "NSU2", data_figures$cruise_new)
+data_figures$cruise_new <- gsub("KM1923", "SF1", data_figures$cruise_new)
+data_figures$cruise_new <- gsub("TN397b", "SF2", data_figures$cruise_new)
+data_figures$cruise_new <- gsub("TN397c", "SF3", data_figures$cruise_new)
+data_figures$cruise_new <- gsub("TN397a", "EF1", data_figures$cruise_new)
+data_figures$cruise_new <- gsub("TN398", "EW1", data_figures$cruise_new)
+data_figures <- data_figures %>%
+  mutate(cruise_new = factor(cruise_new, levels = c("NSP1","NSP2","NSP3","NSU1","NSU2","SF1","SF2","SF3", "EF1","EW1")))
 
 ### FIGURE 1
 
 #getPalette = colorRampPalette((RColorBrewer::brewer.pal(12, "Paired")))
-cruise_cols <- c("KOK1606" = "#154406", "MGL1704" = "#08C495", 
-                 "KM1906" = "#2E8B57",  "KM1712" = "#C21807",
-                 "KM1713" = "#FF0090", "KM1923" = "#D3B683", "TN397b" = "#E9A1B0",
-                 "TN397c" = "#FFC067", "TN397a" = "#95632E", "TN398" = "#7F86D8")
+# cruise_cols <- c("KOK1606" = "#154406", "MGL1704" = "#08C495", 
+#                  "KM1906" = "#2E8B57",  "KM1712" = "#C21807",
+#                  "KM1713" = "#FF0090", "KM1923" = "#D3B683", "TN397b" = "#E9A1B0",
+#                  "TN397c" = "#FFC067", "TN397a" = "#95632E", "TN398" = "#7F86D8")
+cruise_cols <- c("NSP1" = "#154406", "NSP2" = "#08C495",
+                 "NSP3" = "#2E8B57",  "NSU1" = "#C21807",
+                 "NSU2" = "#FF0090", "SF1" = "#D3B683", "SF2" = "#E9A1B0",
+                 "SF3" = "#FFC067", "EF1" = "#95632E", "EW1" = "#7F86D8")
 s <- 2
 
 fig1a <- meta_gyre_d %>%
   ggplot() +
-  geom_path(aes(lon - 360, lat, color = cruise), lwd = 1, show.legend = F) +
+  geom_path(aes(lon - 360, lat, color = cruise_new), lwd = 1, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
-  scale_color_manual(values = getPalette(10)) +
+  scale_color_manual(values = cruise_cols) +
   my_theme + 
   xlab("Longitude (ºW)") +
   ylab("Latitude (ºN)") +
-  annotate("text", x=-140, y=45, label="KM1713", size=s) +
-  annotate("text", x=-142, y=42, label="KM1712", size=s) +
-  annotate("text", x=-162, y=45, label="KOK1606", size=s) +
-  annotate("text", x=-162, y=40, label="MGL1704", size=s) +
-  annotate("text", x=-162, y=35, label="KM1906", size=s) +
-  annotate("text", x=-160, y=-1, label="KM1923", size=s) +
-  annotate("text", x=-122, y=22, label="TN397a", size=s) +
-  annotate("text", x=-133, y=10, label="TN397b", size=s) +
-  annotate("text", x=-146, y=5, label="TN397c", size=s) +
-  annotate("text", x=-130, y=35, label="TN398", size=s)
+  annotate("text", x=-142, y=45, label="NSU2", size=s) +
+  annotate("text", x=-143, y=41, label="NSU1", size=s) +
+  annotate("text", x=-164, y=45, label="NSP1", size=s) +
+  annotate("text", x=-164, y=40, label="NSP2", size=s) +
+  annotate("text", x=-164, y=35, label="NSP3", size=s) +
+  annotate("text", x=-160, y=-1, label="SF1", size=s) +
+  annotate("text", x=-122, y=22, label="EF1", size=s) +
+  annotate("text", x=-133, y=10, label="SF2", size=s) +
+  annotate("text", x=-149, y=5, label="SF3", size=s) +
+  annotate("text", x=-130, y=35, label="EW1", size=s)
 
 fig1b <- data_figures %>%
   #filter(!is.na(salinity_mean)) %>%
-  ggplot(aes(distance, salinity_mean, color = cruise)) +
+  ggplot(aes(distance, salinity_mean, color = cruise_new)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = salinity_mean - salinity_sd, ymax = salinity_mean + salinity_sd), show.legend = F) +
   geom_point(show.legend = F) +
@@ -529,7 +562,7 @@ fig1b <- data_figures %>%
 
 fig1c <- data_figures %>%
   #filter(!is.na(temp_mean)) %>%
-  ggplot(aes(distance, temp_mean, color = cruise)) +
+  ggplot(aes(distance, temp_mean, color = cruise_new)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = temp_mean - temp_sd, ymax = temp_mean + temp_sd), show.legend = F) +
   geom_point() +
@@ -543,7 +576,7 @@ fig1c <- data_figures %>%
 # plot gyre boundaries
 fig1d <- meta_gyre_d %>%
   ggplot() +
-  geom_path(aes(lon - 360, lat, color = gyre, group = cruise), lwd = 1, show.legend = F) +
+  geom_path(aes(lon - 360, lat, color = gyre, group = cruise_new), lwd = 1, show.legend = F) +
   coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
   borders("world", colour = "black", fill = "gray80") +
   my_theme +
@@ -553,7 +586,7 @@ fig1d <- meta_gyre_d %>%
 
 fig1e <- data_figures %>%
   #filter(!is.na(NO3_NO2_mean)) %>%
-  ggplot(aes(distance, NO3_NO2_mean, color = cruise)) +
+  ggplot(aes(distance, NO3_NO2_mean, color = cruise_new)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = NO3_NO2_mean - NO3_NO2_sd, ymax = NO3_NO2_mean + NO3_NO2_sd), show.legend = F) +
   geom_point(show.legend = F) +
@@ -566,7 +599,7 @@ fig1e <- data_figures %>%
 
 fig1f <- data_figures %>%
 #  filter(!is.na(PO4_mean)) %>%
-  ggplot(aes(distance, 10*PO4_mean, color = cruise)) +
+  ggplot(aes(distance, 10*PO4_mean, color = cruise_new)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = 10*(PO4_mean - PO4_sd), ymax = 10 * (PO4_mean + PO4_sd)), show.legend = F) +
   geom_point(show.legend = F) +
@@ -608,7 +641,7 @@ fig2a <- data_figures %>%
                      # sec.axis = sec_axis(transform =~./coeff, 
                      #                     name = expression(paste("DIN (µmol L"^{-1},")")))) +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  facet_wrap(. ~ label, ncol = 5) +
+  facet_wrap(. ~ cruise_new, ncol = 5) +
   my_theme +
   xlab("Distance (km)") 
 
@@ -621,7 +654,7 @@ fig2b <- data_figures %>%
   scale_color_manual(values = pop_cols, name = "Population") +
   scale_y_continuous(trans = "log10", name = expression(paste("Abundance (10"^{6}," cells L"^{-1},")"))) +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  facet_wrap( . ~ label, ncol = 5) +
+  facet_wrap( . ~ cruise_new, ncol = 5) +
   my_theme +
   xlab("Distance (km)")
 
@@ -644,7 +677,7 @@ fig3 <- data_figures %>%
   geom_linerange(aes(ymin = growth_mean - growth_sd, ymax = growth_mean + growth_sd), lwd= 0.5, show.legend = FALSE) +
   geom_line(lwd = 1) +
   scale_color_manual(values = pop_cols, name = "") +
-  facet_wrap(. ~ label, ncol = 5) +
+  facet_wrap(. ~ cruise_new, ncol = 5) +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
   my_theme + 
   theme(legend.position = "top") +
@@ -655,8 +688,30 @@ print(fig3)
 dev.off()
 
 
-
 ### FIGURE 4
+# Cell Size
+
+
+fig4 <- data_figures %>%
+  ggplot(aes(distance, diameter_mean,  col = pop, fill = pop)) + 
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_linerange(aes(ymin = diameter_mean - diameter_sd, ymax = diameter_mean + diameter_sd), lwd = 0.5, show.legend = F) +
+  geom_line(lwd = 1) + 
+  scale_color_manual(values = pop_cols, name = "Population") +
+  scale_y_continuous(name = "Equivalent spherical diameter (μm)") +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
+  facet_wrap( . ~ cruise_new, ncol = 5) +
+  my_theme +
+  theme(legend.position = "top") +
+  xlab("Distance (km)")
+
+
+png("figures/Figure_4.png", width = 2000, height = 750, res = 200)
+print(fig4)
+dev.off()
+
+
+### FIGURE 5
 # correlation plot
 
 
@@ -684,12 +739,9 @@ cor_all <-  meta_gyre_d  %>%
     }
 
 
-
-
-
 colors <- colorRampPalette(c("blue3", "white", "red3"))(10)
 
-png("figures/Figure_4.png", width = 1500, height = 1500, res = 200)
+png("figures/Figure_5.png", width = 1500, height = 1500, res = 200)
 
 par(mfrow=c(1,1))
 corrplot(cor_all$cor_matrix, p.mat = cor_all$p_adj_matrix, 
@@ -721,28 +773,6 @@ dev.off()
 #------------------------
 # d. Supplemental Figures 
 #------------------------
-figS1 <- data_figures %>%
-  ggplot(aes(distance, diameter_mean,  col = pop, fill = pop)) + 
-  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = diameter_mean - diameter_sd, ymax = diameter_mean + diameter_sd), lwd = 0.5, show.legend = F) +
-  geom_line(lwd = 1) + 
-  scale_color_manual(values = pop_cols, name = "Population") +
-  scale_y_continuous(name = "Equivalent spherical diameter (μm)") +
-  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  facet_wrap( . ~ label, ncol = 5) +
-  my_theme +
-  theme(legend.position = "top") +
-  xlab("Distance (km)")
-
-
-png("figures/Figure_S1.png", width = 2000, height = 750, res = 200)
-print(figS1)
-dev.off()
-
-
-
-
-
 
 # Function to process data for each direction
 process_corr_data <- function(data, direction) {
@@ -774,7 +804,7 @@ cor_all_south <- process_corr_data(data_figures, "South")
 
 colors <- colorRampPalette(c("blue2", "grey90","red2"))(200)
 
-png("figures/Figure_S2.png", width = 4500, height = 1500, res = 200)
+png("figures/Figure_S1.png", width = 4500, height = 1500, res = 200)
 
 par(mfrow=c(1,3))
 # North plot
