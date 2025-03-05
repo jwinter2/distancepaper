@@ -665,34 +665,11 @@ dev.off()
 
 
 
-
 ### FIGURE 3
-# Cellular Growth
-
-fig3 <- data_figures %>%
-  #filter(pop == "Prochlorococcus" | pop == "Synechococcus") %>%
-  drop_na(growth_mean) %>%
-  ggplot(aes(distance, growth_mean, group = pop, col  = pop)) +
-  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = growth_mean - growth_sd, ymax = growth_mean + growth_sd), lwd= 0.5, show.legend = FALSE) +
-  geom_line(lwd = 1) +
-  scale_color_manual(values = pop_cols, name = "") +
-  facet_wrap(. ~ cruise_new, ncol = 5) +
-  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  my_theme + 
-  theme(legend.position = "top") +
-  labs(y = expression(paste("Net Cellular Growth (d"^{-1},")")), x = "Distance (km)")
-
-png("figures/Figure_3.png", width = 2000, height = 750, res = 200)
-print(fig3)
-dev.off()
-
-
-### FIGURE 4
 # Cell Size
 
 
-fig4 <- data_figures %>%
+fig3 <- data_figures %>%
   ggplot(aes(distance, diameter_mean,  col = pop, fill = pop)) + 
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = diameter_mean - diameter_sd, ymax = diameter_mean + diameter_sd), lwd = 0.5, show.legend = F) +
@@ -706,9 +683,33 @@ fig4 <- data_figures %>%
   xlab("Distance (km)")
 
 
+png("figures/Figure_3.png", width = 2000, height = 750, res = 200)
+print(fig3)
+dev.off()
+
+
+### FIGURE 4
+# Cellular Growth
+
+fig4 <- data_figures %>%
+  #filter(pop == "Prochlorococcus" | pop == "Synechococcus") %>%
+  drop_na(growth_mean) %>%
+  ggplot(aes(distance, growth_mean, group = pop, col  = pop)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_linerange(aes(ymin = growth_mean - growth_sd, ymax = growth_mean + growth_sd), lwd= 0.5, show.legend = FALSE) +
+  geom_line(lwd = 1) +
+  scale_color_manual(values = pop_cols, name = "") +
+  facet_wrap(. ~ cruise_new, ncol = 5) +
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
+  my_theme + 
+  theme(legend.position = "top") +
+  labs(y = expression(paste("Net Cellular Growth (d"^{-1},")")), x = "Distance (km)")
+
 png("figures/Figure_4.png", width = 2000, height = 750, res = 200)
 print(fig4)
 dev.off()
+
+
 
 
 ### FIGURE 5
