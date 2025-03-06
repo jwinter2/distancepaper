@@ -545,20 +545,16 @@ fig1a <- meta_gyre_d %>%
   annotate("text", x=-149, y=5, label="SF3", size=s) +
   annotate("text", x=-130, y=35, label="EW1", size=s)
 
-fig1b <- data_figures %>%
-  #filter(!is.na(salinity_mean)) %>%
-  ggplot(aes(distance, salinity_mean, color = cruise_new)) +
-  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = salinity_mean - salinity_sd, ymax = salinity_mean + salinity_sd), show.legend = F) +
-  geom_point(show.legend = F) +
-  geom_line(lwd = 1) +
+# plot gyre boundaries
+fig1b <- meta_gyre_d %>%
+  ggplot() +
+  geom_path(aes(lon - 360, lat, color = gyre, group = cruise_new), lwd = 1, show.legend = F) +
+  coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
+  borders("world", colour = "black", fill = "gray80") +
   my_theme +
-  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
-  scale_color_manual(values = cruise_cols) +
-  xlab("Distance (km)") +
-  ylab("Salinity (PSU)") +
-  annotate("text", x=-500, y=36, label="inside gyre", size=s) +
-  annotate("text", x=500, y=36, label="outside gyre", size=s)
+  scale_color_manual(values = viridis(3)) +
+  xlab("Longitude (ºW)") +
+  ylab("Latitude (ºN)")
 
 fig1c <- data_figures %>%
   #filter(!is.na(temp_mean)) %>%
@@ -573,16 +569,20 @@ fig1c <- data_figures %>%
   xlab("Distance (km)") +
   ylab("Temp (ºC)") 
 
-# plot gyre boundaries
-fig1d <- meta_gyre_d %>%
-  ggplot() +
-  geom_path(aes(lon - 360, lat, color = gyre, group = cruise_new), lwd = 1, show.legend = F) +
-  coord_fixed(ratio = 1, xlim = c(-170, -110), ylim = c(-10, 60)) +
-  borders("world", colour = "black", fill = "gray80") +
+fig1d <- data_figures %>%
+  #filter(!is.na(salinity_mean)) %>%
+  ggplot(aes(distance, salinity_mean, color = cruise_new)) +
+  annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
+  geom_linerange(aes(ymin = salinity_mean - salinity_sd, ymax = salinity_mean + salinity_sd), show.legend = F) +
+  geom_point(show.legend = F) +
+  geom_line(lwd = 1) +
   my_theme +
-  scale_color_manual(values = viridis(3)) +
-  xlab("Longitude (ºW)") +
-  ylab("Latitude (ºN)")
+  scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
+  scale_color_manual(values = cruise_cols) +
+  xlab("Distance (km)") +
+  ylab("Salinity (PSU)") +
+  annotate("text", x=-500, y=36, label="inside gyre", size=s) +
+  annotate("text", x=500, y=36, label="outside gyre", size=s)
 
 fig1e <- data_figures %>%
   #filter(!is.na(NO3_NO2_mean)) %>%
@@ -590,7 +590,7 @@ fig1e <- data_figures %>%
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
   geom_linerange(aes(ymin = NO3_NO2_mean - NO3_NO2_sd, ymax = NO3_NO2_mean + NO3_NO2_sd), show.legend = F) +
   geom_point(show.legend = F) +
-  geom_line(lwd = 1) +
+  #geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
   scale_color_manual(values = cruise_cols) +
@@ -599,20 +599,20 @@ fig1e <- data_figures %>%
 
 fig1f <- data_figures %>%
 #  filter(!is.na(PO4_mean)) %>%
-  ggplot(aes(distance, 10*PO4_mean, color = cruise_new)) +
+  ggplot(aes(distance, PO4_mean, color = cruise_new)) +
   annotate("rect", xmin = -binning, xmax = binning, ymin = -Inf, ymax = Inf,  fill = "lightgrey") +
-  geom_linerange(aes(ymin = 10*(PO4_mean - PO4_sd), ymax = 10 * (PO4_mean + PO4_sd)), show.legend = F) +
+  geom_linerange(aes(ymin = (PO4_mean - PO4_sd), ymax = (PO4_mean + PO4_sd)), show.legend = F) +
   geom_point(show.legend = F) +
-  geom_line(lwd = 1) +
+  #geom_line(lwd = 1) +
   my_theme +
   scale_x_continuous(breaks = seq(-500, 1500, by = 500)) +
   scale_color_manual(values = cruise_cols) +
   xlab("Distance (km)") +
-  ylab(expression(paste("DIP (10 x µmol L"^{-1},")"))) 
+  ylab(expression(paste("DIP (µmol L"^{-1},")"))) 
 
-png("figures/Figure_1.png", width = 2000, height = 1200, res = 200)
-ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1d,fig1e, fig1f,
-                  ncol = 3, nrow = 2, labels="auto",
+png("figures/Figure_1.png", width = 1600, height = 1600, res = 200)
+ggpubr::ggarrange(fig1a, fig1b, fig1c, fig1d, fig1e, fig1f,
+                  ncol = 2, nrow = 3, labels="auto",
                   common.legend = TRUE, legend = "top")
 dev.off()
 
